@@ -13,7 +13,12 @@ a = Analysis(
         ('turing-smart-screen-python/res/fonts/roboto-mono/*.ttf', 'res/fonts/roboto-mono'),
     ],
     hiddenimports=[
+        'watchdog',
+        'watchdog.observers',
         'watchdog.observers.winapi',
+        'watchdog.observers.api',
+        'watchdog.observers.read_directory_changes',
+        'watchdog.events',
         'google.cloud.translate_v2',
         'cachetools',
         'pydantic',

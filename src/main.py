@@ -6,6 +6,8 @@ import os
 import time
 import re
 
+__version__ = "1.0.0"  # Current version number
+
 def get_executable_dir():
     """Get the directory containing the executable or script."""
     if getattr(sys, 'frozen', False):
@@ -221,7 +223,7 @@ class Left4Translate:
     def start(self):
         """Start the application."""
         try:
-            self.logger.info("Starting Left4Translate...")
+            self.logger.info(f"Starting Left4Translate v{__version__}...")
             self.running = True
             
             # Connect to screen

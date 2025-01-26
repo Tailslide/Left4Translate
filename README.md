@@ -1,6 +1,8 @@
-# Left4Translate
+# Left4Translate v1.0.0
 
 Real-time chat translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/Left4Translate)
 
 ## Features
 

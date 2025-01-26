@@ -20,7 +20,15 @@ def get_resource_path(relative_path):
     
     return os.path.join(base_path, relative_path)
 
-# Import Turing library directly since it's included in the executable
+import sys
+from pathlib import Path
+
+# Add turing library to path
+turing_path = str(Path(__file__).resolve().parent.parent.parent / 'turing-smart-screen-python')
+if turing_path not in sys.path:
+    sys.path.append(turing_path)
+
+# Import Turing library
 from library.lcd.lcd_comm_rev_a import LcdCommRevA, Orientation
 from library.lcd.color import Color
 
@@ -120,7 +128,20 @@ class ScreenController:
                 self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
                 self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
             
-            # Initial display
+            # Display startup message
+            from main import __version__
+            draw = ImageDraw.Draw(self.display_buffer)
+            startup_msg = f"Left4Translate v{__version__}"
+            # Center the text
+            text_width = draw.textlength(startup_msg, font=self.font_bold)
+            x = (480 - text_width) // 2  # Center horizontally
+            y = 150  # Center vertically (320/2 - line height)
+            draw.text((x, y), startup_msg, font=self.font_bold, fill=self.PLAYER_COLOR)
+            self.screen.DisplayPILImage(self.display_buffer)
+            time.sleep(2)  # Show startup message for 2 seconds
+            
+            # Clear screen for normal operation
+            draw.rectangle([0, 0, 480, 320], fill=self.BACKGROUND_COLOR)
             self.screen.DisplayPILImage(self.display_buffer)
             
             # Start display thread
