@@ -9,6 +9,8 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 - Support for both regular and team chat messages
 - Support for special characters and emojis in player names
 - Support for all game chat formats including infected team messages
+- Smart translation of gaming slang and casual expressions
+- Built-in Spanish gaming slang dictionary (e.g., "bistec" → "buff", "ostia tio" → "holy crap dude")
 - Display of translated messages on a Turing Smart Screen
 - Message caching to reduce API calls
 - Rate limiting to prevent API overuse

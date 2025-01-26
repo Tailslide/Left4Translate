@@ -98,6 +98,12 @@ class TranslationService:
                     if len(cleaned_text) <= 1:
                         logging.debug(f"Skipping translation for short text: '{text}'")
                         return text
+                        
+                    # Try slang translation first
+                    slang_translated, was_slang = self._translate_slang(cleaned_text)
+                    if was_slang:
+                        logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
+                        return slang_translated
 
                     # Detect language if not provided
                     if not source_language:
@@ -167,13 +173,62 @@ class TranslationService:
                 
         raise Exception("Failed to acquire rate limit token")
         
+    def _get_slang_translations(self) -> dict:
+        """Get dictionary of Spanish gaming/internet slang translations."""
+        return {
+            'bistec': 'buff',  # Gaming slang for strong/muscular
+            'ostia tio': 'holy crap dude',
+            'tio': 'bro',
+            'vale': 'ok',
+            'joder': 'damn',
+            'vamos': "let's go",
+            'que pasa': "what's up",
+            'si': 'yeah',
+            'no mames': 'no way',
+            'pinche': 'freaking',
+            'wey': 'dude',
+            'chido': 'cool',
+            'gg': 'good game',
+            'np': 'no problem'
+        }
+
+    def _translate_slang(self, text: str) -> tuple[str, bool]:
+        """
+        Attempt to translate common gaming/internet slang.
+        Returns tuple of (translated_text, was_translated).
+        """
+        slang_dict = self._get_slang_translations()
+        lower_text = text.lower().strip()
+        
+        # Try exact matches first
+        if lower_text in slang_dict:
+            return slang_dict[lower_text], True
+            
+        # Try word by word for partial matches
+        words = lower_text.split()
+        translated_words = []
+        had_translation = False
+        
+        for word in words:
+            if word in slang_dict:
+                translated_words.append(slang_dict[word])
+                had_translation = True
+            else:
+                translated_words.append(word)
+                
+        if had_translation:
+            return ' '.join(translated_words), True
+            
+        return text, False
+
     def _preprocess_text(self, text: str) -> str:
         """Preprocess text to help with language detection."""
         # Common Spanish words/phrases that might be misdetected
         spanish_indicators = [
             'hola', 'amigo', 'que', 'como', 'estas', 'bien',
             'gracias', 'por favor', 'si', 'ostia', 'tio',
-            'vale', 'joder', 'vamos', 'adios'
+            'vale', 'joder', 'vamos', 'adios', 'wey', 'chido',
+            'pinche', 'mames', 'bistec'
         ]
         
         # Check if text contains any Spanish indicators
