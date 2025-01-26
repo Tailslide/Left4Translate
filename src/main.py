@@ -10,14 +10,12 @@ __version__ = "1.0.0"  # Current version number
 
 def get_executable_dir():
     """Get the directory containing the executable or script."""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        return os.path.dirname(sys.executable)
-    else:
-        # Running as script
-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    print(f"Executable directory: {exe_dir}")
+    return exe_dir
 
 def setup_logging(config_path: str):
+    print(f"Looking for config at: {config_path}")
     """Set up logging configuration before importing other modules."""
     import json
     
@@ -71,18 +69,29 @@ class Left4Translate:
     def __init__(self, config_path: str):
         self.running = False
         
-        # Load configuration
-        self.config_manager = ConfigManager(config_path)
-        self.config_manager.load_config()
-        
-        # Set up application logging
-        self.logger = setup_app_logging(self.config_manager)
-        
-        # Validate configuration
-        errors = self.config_manager.validate_config()
-        if errors:
-            for error in errors:
-                self.logger.error(f"Configuration error: {error}")
+        try:
+            # Load configuration
+            self.config_manager = ConfigManager(config_path)
+            self.config_manager.load_config()
+            
+            # Set up application logging
+            self.logger = setup_app_logging(self.config_manager)
+            
+            # Validate configuration
+            errors = self.config_manager.validate_config()
+            if errors:
+                for error in errors:
+                    self.logger.error(f"Configuration error: {error}")
+                print("\nConfiguration errors found. Please:")
+                print("1. Copy config.sample.json to config.json")
+                print("2. Add your Google Cloud Translation API key")
+                print("3. Configure your screen settings")
+                sys.exit(1)
+        except FileNotFoundError:
+            print("\nConfiguration file not found. Please:")
+            print("1. Copy config.sample.json to config.json")
+            print("2. Add your Google Cloud Translation API key")
+            print("3. Configure your screen settings")
             sys.exit(1)
             
         # Initialize components

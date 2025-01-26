@@ -52,8 +52,12 @@ To create a standalone executable:
    ```
 2. Install dependencies: `pip install -r requirements.txt`
 3. Build the executable: `pyinstaller Left4Translate.spec`
+4. Create your configuration:
+   - Copy `config.sample.json` from the dist directory to `config.json`
+   - Add your Google Cloud Translation API key to `config.json`
+   - Configure your screen settings in `config.json`
 
-The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build.
+The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build. Note that you must create your own config.json with your API key - this is not included in the build for security reasons.
 
 ## Configuration
 
