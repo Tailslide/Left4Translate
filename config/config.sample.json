@@ -1,0 +1,44 @@
+{
+  "game": {
+    "logPath": "C:/path/to/steam/Left 4 Dead 2/left4dead2/console.log",
+    "pollInterval": 1000,
+    "messageFormat": {
+      "regex": "^(?:\\((Survivor|Infected)\\)[ ])?((?!Host_|Update|Unable|Changing|CAsync|NET_|L\\s|String|Signal|Map|Server|Build|Players|Commentary|VSCRIPT|Anniversary|Steam|Network|RememberIPAddressForLobby)[\\x03]?[A-Za-z][A-Za-z0-9\\s\\x01\\x03]{2,}?)[ ]+:[ ][ ]+(.+)$",
+      "groups": {
+        "team": 1,
+        "player": 2,
+        "message": 3
+      }
+    }
+  },
+  "translation": {
+    "service": "google",
+    "apiKey": "YOUR_GOOGLE_TRANSLATE_API_KEY",
+    "targetLanguage": "en",
+    "cacheSize": 1000,
+    "rateLimitPerMinute": 100,
+    "retryAttempts": 3
+  },
+  "screen": {
+    "port": "COMX",
+    "baudRate": 115200,
+    "brightness": 50,
+    "refreshRate": 1000,
+    "display": {
+      "fontSize": 14,
+      "maxMessages": 12,
+      "messageTimeout": 0,
+      "layout": {
+        "margin": 2,
+        "spacing": 2
+      }
+    }
+  },
+  "logging": {
+    "level": "info",
+    "path": "logs/app.log",
+    "maxSize": "10MB",
+    "backupCount": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}
