@@ -1,26 +1,26 @@
 {
   "game": {
-    "logPath": "C:/path/to/steam/Left 4 Dead 2/left4dead2/console.log",
+    "logPath": "C:/Program Files (x86)/Steam/steamapps/common/Left 4 Dead 2/left4dead2/console.log",
     "pollInterval": 1000,
     "messageFormat": {
-      "regex": "^(?:\\((Survivor|Infected)\\)[ ])?((?!Host_|Update|Unable|Changing|CAsync|NET_|L\\s|String|Signal|Map|Server|Build|Players|Commentary|VSCRIPT|Anniversary|Steam|Network|RememberIPAddressForLobby)[\\x03]?[A-Za-z][A-Za-z0-9\\s\\x01\\x03]{2,}?)[ ]+:[ ][ ]+(.+)$",
+      "regex": "^\\((Survivor|Infected)\\)\\s*(?:C\\s*\\(Infected\\)\\s*)?([^:]+?)\\s*:\\s*(.+)$|^([^:]+?)\\s*:\\s*(.+)$",
       "groups": {
         "team": 1,
-        "player": 2,
-        "message": 3
+        "player": "2,4",
+        "message": "3,5"
       }
     }
   },
   "translation": {
     "service": "google",
-    "apiKey": "YOUR_GOOGLE_TRANSLATE_API_KEY",
+    "apiKey": "YOUR_API_KEY_HERE",
     "targetLanguage": "en",
     "cacheSize": 1000,
     "rateLimitPerMinute": 100,
     "retryAttempts": 3
   },
   "screen": {
-    "port": "COMX",
+    "port": "COM8",
     "baudRate": 115200,
     "brightness": 50,
     "refreshRate": 1000,

@@ -1,233 +1,99 @@
 # Left4Translate
 
-Automatically translate Left 4 Dead chat messages to English and display them on a Turing Smart Screen device.
-
-## Overview
-
-Left4Translate monitors your Left 4 Dead game chat, automatically translates non-English messages to English, and displays them on a secondary Turing Smart Screen display. This enhances communication with players using different languages during gameplay.
+Real-time chat translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
 
 ## Features
 
-- Real-time chat message monitoring
-- Automatic language detection and translation
-- Display on Turing Smart Screen device
-- Message caching to reduce translation API usage
+- Real-time monitoring of L4D2 console log
+- Automatic translation of chat messages to English
+- Support for both regular and team chat messages
+- Support for special characters and emojis in player names
+- Support for all game chat formats including infected team messages
+- Display of translated messages on a Turing Smart Screen
+- Message caching to reduce API calls
+- Rate limiting to prevent API overuse
 - Configurable display settings
-- Error recovery and logging
+- Extensive logging for troubleshooting
 
 ## Requirements
 
-- Python 3.8 or higher
-- Left 4 Dead game
-- Turing Smart Screen device (3.5" or 5")
+- Python 3.8+
+- Left 4 Dead 2
+- Turing Smart Screen
 - Google Cloud Translation API key
-- USB port for screen connection
 
-## Hardware Setup
+## Installation
 
-1. Connect your Turing Smart Screen to an available USB port
-2. Note the COM port number from Device Manager (Windows) or `ls /dev/tty*` (Linux/Mac)
-3. Enable console logging in Left 4 Dead:
-   - Right-click Left 4 Dead in Steam
-   - Select Properties
-   - Set Launch Options: `-condebug -conclearlog`
-   - Click OK
-   - Launch game
-
-The game will now automatically log all console output to the console.log file in your game directory. The exact path will depend on your Steam installation location and should be configured in `config/config.json`.
-
-## Software Setup
-
-1. Run the setup script to create virtual environment, install dependencies, and set up the Turing Smart Screen library:
-```bash
-python setup.py
-```
-
-2. Activate the virtual environment:
-```bash
-# On Windows:
-.\venv\Scripts\activate
-
-# On Unix/Linux/Mac:
-source venv/bin/activate
-```
-
-3. Configure settings:
-   - Copy `config/config.sample.json` to `config/config.json`
-   - Update the following in `config/config.json`:
-     - Game log path (path to your Left 4 Dead console.log)
-     - Translation API key (from Google Cloud Console)
-     - COM port (check Device Manager for correct port)
-     - Other display preferences as needed
-
-Note: The sample config contains placeholder values that must be replaced with your actual settings. Never commit your `config/config.json` file as it contains sensitive information.
-
-## Usage
-
-### Using Python (Development)
-
-1. Start the application:
-```bash
-python src/main.py
-```
-
-2. The application will:
-   - Connect to your Turing Smart Screen
-   - Monitor Left 4 Dead chat messages
-   - Automatically translate non-English messages
-   - Display original and translated messages on screen
-
-3. To stop the application:
-   - Press Ctrl+C
-   - The application will clean up and exit gracefully
-
-### Using Windows Executable
-
-A standalone Windows executable is available in the `dist` directory. This version doesn't require Python installation.
-
-1. Copy the following to a new location:
-   - `Left4Translate.exe` from the `dist` directory
-   - `config` directory containing your configured `config.json`
-
-2. Run `Left4Translate.exe`
-   - Double-click the executable or run from command prompt
-   - The application will use the adjacent `config` directory for configuration
-
-3. To stop the application:
-   - Close the console window
-   - The application will clean up and exit gracefully
-
-Note: When using the executable version, make sure your `config.json` is properly configured with:
-- Correct game log path
-- Valid translation API key
-- Proper COM port for your Turing Smart Screen
-
-## Testing
-
-Individual components can be tested separately:
-
-1. Test screen connection:
-```bash
-python src/tools/test_screen.py
-```
-
-2. Test configuration:
-```bash
-python src/tools/test_config.py
-```
-
-3. Test message reader:
-```bash
-python src/tools/test_message_reader.py
-```
-
-4. Test translation:
-
-Unit Tests (Mock API):
-```bash
-python src/tools/test_translation.py
-```
-
-The unit test suite verifies:
-- Automatic language detection
-- Translation with explicit source language
-- Translation caching mechanism
-- Rate limiting behavior
-- Error handling and retries
-- Skip translation for text already in target language
-- Cache statistics reporting
-
-Live API Tests:
-```bash
-python src/tools/test_translation_live.py
-```
-
-The live test suite makes actual API calls to verify:
-- Real translations from Spanish and French
-- Live language detection
-- Caching with real translations
-- Integration with Google Cloud Translation API
-
-Note: Live tests require a valid API key in config.json and will incur API usage costs.
+1. Clone this repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Copy `config/config.sample.json` to `config/config.json`
+4. Add your Google Cloud Translation API key to `config.json`
+5. Configure your screen settings in `config.json`
 
 ## Configuration
 
-The config.json file supports the following settings:
+The `config.json` file contains all settings:
 
-### Game Settings
-- logPath: Path to Left 4 Dead console log
-- pollInterval: How often to check for new messages
-- messageFormat: Regular expression for parsing chat messages
-
-### Translation Settings
-- service: Translation service to use (currently Google)
-- apiKey: Your translation API key
-- targetLanguage: Language to translate to (e.g., "en")
-- cacheSize: Number of translations to cache
-- rateLimitPerMinute: API call rate limit
-
-### Screen Settings
-- port: COM port for Turing Smart Screen
-- baudRate: Communication speed (usually 115200)
-- brightness: Screen brightness (0-100)
-- display: Layout and message display settings
-
-### Logging Settings
-- level: Log level (info, debug, etc.)
-- path: Log file location
-- maxSize: Maximum log file size
-- backupCount: Number of backup logs to keep
-
-## Troubleshooting
-
-1. Screen Connection Issues:
-   - Verify COM port number in Device Manager
-   - Try running as administrator
-   - Check USB connection
-   - Ensure no other program is using the port
-
-2. Translation Issues:
-    - Verify API key is correct
-    - Check internet connection
-    - Monitor API quota usage
-    - Check log files for errors
-    - Enable debug logging in config.json for detailed translation diagnostics:
-      ```json
-      {
-        "logging": {
-          "level": "debug"
-        }
+```json
+{
+  "game": {
+    "logPath": "path/to/left4dead2/console.log",
+    "pollInterval": 1000,
+    "messageFormat": {
+      "regex": "...",  // Pattern for parsing chat messages
+      "groups": {
+        "team": 1,     // Group number for team name
+        "player": "2,4", // Group numbers for player name
+        "message": "3,5" // Group numbers for message content
       }
-      ```
-    Debug logs will show:
-    - Full request/response data
-    - Language detection results and confidence
-    - Text lengths and content
-    - Rate limiting status
-    - Detailed API error messages
-    - Text cleaning results (removal of color codes and control characters)
+    }
+  },
+  "translation": {
+    "service": "google",
+    "apiKey": "YOUR_API_KEY_HERE",
+    "targetLanguage": "en",
+    "cacheSize": 1000,
+    "rateLimitPerMinute": 100,
+    "retryAttempts": 3
+  },
+  "screen": {
+    "port": "COM8",
+    "baudRate": 115200,
+    "brightness": 50,
+    "refreshRate": 1000,
+    "display": {
+      "fontSize": 14,
+      "maxMessages": 12,
+      "messageTimeout": 0,
+      "layout": {
+        "margin": 2,
+        "spacing": 2
+      }
+    }
+  }
+}
+```
 
-    Note: The translation service automatically handles:
-    - Color codes and control characters (e.g., \x03, \x01)
-    - Both actual control characters and escaped sequences
-    - Preserves original text formatting in the display while cleaning for translation
+## Usage
 
-3. Game Log Issues:
-   - Verify launch options include `-condebug -conclearlog`
-   - Check console.log exists in game directory
-   - Ensure game has write permissions
-   - Restart game if needed
+1. Start Left 4 Dead 2
+2. Enable console logging: `con_logfile console.log`
+3. Run the translator: `python src/main.py`
 
-## Architecture
+## Message Format Support
 
-See [Architecture Documentation](docs/architecture.md) for detailed technical information about the system design and implementation.
+The application supports various chat message formats:
+
+- Regular chat: `PlayerName : message`
+- Team chat: `(Survivor|Infected) PlayerName : message`
+- Special formats: `(Infected) C(Infected) PlayerName : message`
+- Names with special characters: `♥PlayerName☺`
+- Messages with emojis and special characters
+
+## Contributing
+
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- [Turing Smart Screen Python Library](https://github.com/mathoudebine/turing-smart-screen-python)
-- Google Cloud Translation API
-- Left 4 Dead game and community
+[MIT](https://choosealicense.com/licenses/mit/)

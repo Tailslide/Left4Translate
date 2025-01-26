@@ -3,6 +3,7 @@ import json
 import sys
 import time
 from pathlib import Path
+import argparse
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -12,13 +13,20 @@ from reader.message_reader import GameMessageReader, Message
 def message_callback(message: Message):
     """Callback function to handle detected messages."""
     print(f"\nNew message detected:")
-    print(f"Timestamp: {message.timestamp}")
+    if message.team:
+        print(f"Team: {message.team}")
     print(f"Player: {message.player}")
     print(f"Content: {message.content}")
     print("-" * 50)
 
 def main():
     """Test the message reader functionality."""
+    parser = argparse.ArgumentParser(description='Test message reader with optional timeout')
+    parser.add_argument('--timeout', type=int, default=0, help='Stop after N seconds (0 for no timeout)')
+    parser.add_argument('--read-once', action='store_true', help='Read existing log content and exit')
+    parser.add_argument('--from-start', action='store_true', help='Start reading from beginning of file')
+    args = parser.parse_args()
+
     try:
         # Load configuration
         config_manager = ConfigManager("config/config.json")
@@ -40,6 +48,14 @@ def main():
         print(f"Starting message reader test...")
         print(f"Log file path: {log_path}")
         print(f"Message pattern: {message_pattern}")
+        if args.read_once:
+            print("Mode: Read existing content and exit")
+        elif args.timeout > 0:
+            print(f"Mode: Monitor with {args.timeout} second timeout")
+        else:
+            print("Mode: Monitor continuously")
+        if args.from_start:
+            print("Starting from beginning of file")
         print("\nWaiting for messages... (Press Ctrl+C to stop)")
         print("-" * 50)
         
@@ -50,16 +66,29 @@ def main():
             callback=message_callback
         )
         
-        # Start monitoring
-        reader.start_monitoring()
-        
-        # Keep running until interrupted
         try:
-            while True:
-                time.sleep(1)
+            if args.read_once:
+                # Just process existing content and exit
+                if Path(log_path).exists():
+                    reader.handler._process_new_lines(str(log_path), args.from_start)
+                print("\nFinished reading existing content")
+            else:
+                # Start monitoring
+                reader.start_monitoring(args.from_start)
+                
+                # Keep running until timeout or interrupted
+                start_time = time.time()
+                while True:
+                    if args.timeout > 0 and time.time() - start_time >= args.timeout:
+                        print(f"\nTimeout reached ({args.timeout} seconds)")
+                        break
+                    time.sleep(1)
         except KeyboardInterrupt:
             print("\nStopping message reader...")
-            reader.stop_monitoring()
+        finally:
+            if not args.read_once:
+                reader.stop_monitoring()
+            print("Message reader stopped")
             
     except FileNotFoundError as e:
         print(f"Error: {e}")
