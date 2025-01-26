@@ -21,6 +21,7 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 - Left 4 Dead 2
 - Turing Smart Screen
 - Google Cloud Translation API key
+- Roboto Mono fonts (included in res/fonts/roboto-mono)
 
 ## Installation
 
@@ -29,6 +30,15 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 3. Copy `config/config.sample.json` to `config/config.json`
 4. Add your Google Cloud Translation API key to `config.json`
 5. Configure your screen settings in `config.json`
+
+### Building Executable
+
+To create a standalone executable:
+
+1. Install PyInstaller: `pip install pyinstaller`
+2. Build the executable: `pyinstaller Left4Translate.spec`
+
+The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build.
 
 ## Configuration
 

@@ -107,9 +107,18 @@ class ScreenController:
             self.display_buffer = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
             
             # Load fonts with absolute paths
-            font_path = get_resource_path(os.path.join('res', 'fonts', 'roboto-mono'))
-            self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
-            self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
+            try:
+                # First try the PyInstaller path
+                font_path = get_resource_path(os.path.join('res', 'fonts', 'roboto-mono'))
+                self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
+                self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
+            except Exception as e:
+                print(f"Failed to load fonts from primary path: {e}")
+                # Try the development path
+                font_path = os.path.join(str(Path(__file__).resolve().parent.parent.parent),
+                                       'turing-smart-screen-python', 'res', 'fonts', 'roboto-mono')
+                self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
+                self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
             
             # Initial display
             self.screen.DisplayPILImage(self.display_buffer)

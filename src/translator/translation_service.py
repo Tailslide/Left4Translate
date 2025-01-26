@@ -83,8 +83,9 @@ class TranslationService:
         # Clean the text first
         cleaned_text = self._clean_text(text)
         
-        # Check cache first
-        cache_key = f"{source_language or 'auto'}:{cleaned_text}"
+        # Check cache first - strip script part from source language if present
+        source_lang_base = source_language.split('-')[0] if source_language else 'auto'
+        cache_key = f"{source_lang_base}:{cleaned_text}"
         if cache_key in self.cache:
             return self.cache[cache_key]
             
@@ -101,12 +102,15 @@ class TranslationService:
                     # Detect language if not provided
                     if not source_language:
                         detected = self.detect_language(cleaned_text)
-                        source_language = detected
+                        # Strip script part of language code (e.g., 'es-Latn' -> 'es')
+                        base_language = detected.split('-')[0]
                         
                         # Skip translation if already in target language or undefined
-                        if source_language == self.target_language or source_language == 'und':
-                            logging.debug(f"Skipping translation for language: {source_language}")
+                        if base_language == self.target_language or base_language == 'und':
+                            logging.debug(f"Skipping translation for language: {detected}")
                             return text  # Return original text, not cleaned
+                        
+                        source_language = base_language  # Use base language code for translation
                     
                     # Perform translation
                     data = {
@@ -114,7 +118,8 @@ class TranslationService:
                         'target': self.target_language
                     }
                     if source_language:
-                        data['source'] = source_language
+                        # Strip script part from source language if present
+                        data['source'] = source_language.split('-')[0]
 
                     logging.debug("Translation request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
                     logging.debug(f"Text length: {len(text)} characters")

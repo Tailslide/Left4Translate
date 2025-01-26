@@ -146,8 +146,35 @@ class Left4Translate:
                 
             # Extract components using the configured group indices
             team_type = match.group(groups["team"]) if "team" in groups else None
-            player_name = match.group(groups["player"]).strip()
-            chat_message = match.group(groups["message"])
+            
+            # Handle comma-separated group indices for player and message
+            player_groups = [int(g) for g in str(groups["player"]).split(",")]
+            message_groups = [int(g) for g in str(groups["message"]).split(",")]
+            
+            # Try each group index until we find a non-None match
+            player_name = None
+            for group in player_groups:
+                try:
+                    value = match.group(group)
+                    if value is not None:
+                        player_name = value.strip()
+                        break
+                except IndexError:
+                    continue
+                    
+            chat_message = None
+            for group in message_groups:
+                try:
+                    value = match.group(group)
+                    if value is not None:
+                        chat_message = value
+                        break
+                except IndexError:
+                    continue
+                    
+            if player_name is None or chat_message is None:
+                self.logger.debug("Failed to extract player name or message")
+                return
             
             # Debug log the parsed components
             self.logger.debug(f"Parsed message - Team: {team_type}, Player: {player_name}, Message: {chat_message}")
