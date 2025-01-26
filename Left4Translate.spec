@@ -9,7 +9,6 @@ a = Analysis(
     datas=[
         ('config/config.sample.json', 'config'),
         ('docs', 'docs'),
-        ('src', 'src'),
         ('turing-smart-screen-python/library', 'library'),
         ('turing-smart-screen-python/res/fonts/roboto-mono/*.ttf', 'res/fonts/roboto-mono'),
     ],
