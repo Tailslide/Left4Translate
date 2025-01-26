@@ -10,14 +10,17 @@ import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
-# Add Turing library to Python path
-turing_path = str(Path(__file__).resolve().parent.parent.parent / 'turing-smart-screen-python')
-if turing_path not in sys.path:
-    sys.path.append(turing_path)
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = str(Path(__file__).resolve().parent.parent.parent)
+    
+    return os.path.join(base_path, relative_path)
 
-# Change to Turing library directory for resource paths
-os.chdir(turing_path)
-
+# Import Turing library directly since it's included in the executable
 from library.lcd.lcd_comm_rev_a import LcdCommRevA, Orientation
 from library.lcd.color import Color
 
@@ -103,9 +106,10 @@ class ScreenController:
             # Create display buffer
             self.display_buffer = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
             
-            # Load fonts
-            self.font = ImageFont.truetype("res/fonts/roboto-mono/RobotoMono-Regular.ttf", 14)  # Slightly smaller font
-            self.font_bold = ImageFont.truetype("res/fonts/roboto-mono/RobotoMono-Bold.ttf", 14)
+            # Load fonts with absolute paths
+            font_path = get_resource_path(os.path.join('res', 'fonts', 'roboto-mono'))
+            self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
+            self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
             
             # Initial display
             self.screen.DisplayPILImage(self.display_buffer)

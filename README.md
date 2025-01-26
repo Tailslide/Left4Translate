@@ -64,6 +64,8 @@ Note: The sample config contains placeholder values that must be replaced with y
 
 ## Usage
 
+### Using Python (Development)
+
 1. Start the application:
 ```bash
 python src/main.py
@@ -78,6 +80,27 @@ python src/main.py
 3. To stop the application:
    - Press Ctrl+C
    - The application will clean up and exit gracefully
+
+### Using Windows Executable
+
+A standalone Windows executable is available in the `dist` directory. This version doesn't require Python installation.
+
+1. Copy the following to a new location:
+   - `Left4Translate.exe` from the `dist` directory
+   - `config` directory containing your configured `config.json`
+
+2. Run `Left4Translate.exe`
+   - Double-click the executable or run from command prompt
+   - The application will use the adjacent `config` directory for configuration
+
+3. To stop the application:
+   - Close the console window
+   - The application will clean up and exit gracefully
+
+Note: When using the executable version, make sure your `config.json` is properly configured with:
+- Correct game log path
+- Valid translation API key
+- Proper COM port for your Turing Smart Screen
 
 ## Testing
 

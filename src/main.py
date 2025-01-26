@@ -6,6 +6,15 @@ import os
 import time
 import re
 
+def get_executable_dir():
+    """Get the directory containing the executable or script."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def setup_logging(config_path: str):
     """Set up logging configuration before importing other modules."""
     import json
@@ -30,10 +39,19 @@ def setup_logging(config_path: str):
     )
 
 # Set up logging before importing other modules
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-config_path = os.path.join(base_dir, "config", "config.json")
+exe_dir = get_executable_dir()
+
+# Try to find config in this order:
+# 1. Command line argument
+# 2. config.json in executable directory
+# 3. Default config directory
 if len(sys.argv) > 1:
     config_path = sys.argv[1]
+elif os.path.exists(os.path.join(exe_dir, "config.json")):
+    config_path = os.path.join(exe_dir, "config.json")
+else:
+    config_path = os.path.join(exe_dir, "config", "config.json")
+
 setup_logging(config_path)
 
 from config.config_manager import ConfigManager
