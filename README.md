@@ -44,8 +44,14 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 
 To create a standalone executable:
 
-1. Install PyInstaller: `pip install pyinstaller`
-2. Build the executable: `pyinstaller Left4Translate.spec`
+1. Create and activate a virtual environment (recommended):
+   ```bash
+   python -m venv venv
+   .\venv\Scripts\activate  # Windows
+   source venv/bin/activate # Linux/Mac
+   ```
+2. Install dependencies: `pip install -r requirements.txt`
+3. Build the executable: `pyinstaller Left4Translate.spec`
 
 The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build.
 
