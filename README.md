@@ -38,15 +38,18 @@ The game will now automatically log all console output to the console.log file i
 
 ## Software Setup
 
-1. Create and activate virtual environment:
+1. Run the setup script to create virtual environment, install dependencies, and set up the Turing Smart Screen library:
 ```bash
-python -m venv venv
-.\venv\Scripts\activate
+python setup.py
 ```
 
-2. Install dependencies:
+2. Activate the virtual environment:
 ```bash
-pip install -r requirements.txt
+# On Windows:
+.\venv\Scripts\activate
+
+# On Unix/Linux/Mac:
+source venv/bin/activate
 ```
 
 3. Configure settings:

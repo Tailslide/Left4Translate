@@ -36,6 +36,10 @@ config/config.json
 config.json
 logs/
 *.log
+src/library/
+
+# Turing Smart Screen library
+turing-smart-screen-python/
 
 # Environment variables
 .env

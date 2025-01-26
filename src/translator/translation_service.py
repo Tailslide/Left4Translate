@@ -8,10 +8,6 @@ import logging
 import re
 import html
 
-logging.basicConfig(level=logging.DEBUG,
-                   format='%(asctime)s [%(levelname)s] %(message)s',
-                   datefmt='%m/%d/%Y %I:%M:%S %p')
-
 class RateLimiter:
     """Simple token bucket rate limiter."""
     

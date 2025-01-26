@@ -6,28 +6,43 @@ import os
 import time
 import re
 
+def setup_logging(config_path: str):
+    """Set up logging configuration before importing other modules."""
+    import json
+    
+    # Load logging config from config.json
+    with open(config_path) as f:
+        config = json.load(f)
+    log_config = config.get("logging", {})
+    
+    # Create logs directory if it doesn't exist
+    log_dir = Path(log_config.get("path", "logs/app.log")).parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Set up root logger first
+    logging.basicConfig(
+        level=getattr(logging, log_config.get("level", "INFO").upper()),
+        format=log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
+        handlers=[
+            logging.FileHandler(log_config.get("path", "logs/app.log")),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
+# Set up logging before importing other modules
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+config_path = os.path.join(base_dir, "config", "config.json")
+if len(sys.argv) > 1:
+    config_path = sys.argv[1]
+setup_logging(config_path)
+
 from config.config_manager import ConfigManager
 from reader.message_reader import GameMessageReader, Message
 from translator.translation_service import TranslationService
 from display.screen_controller import ScreenController
 
-def setup_logging(config_manager):
-    """Set up logging configuration."""
-    log_config = config_manager.get_logging_config()
-    
-    # Create logs directory if it doesn't exist
-    log_dir = Path(log_config.path).parent
-    log_dir.mkdir(parents=True, exist_ok=True)
-    
-    logging.basicConfig(
-        level=getattr(logging, log_config.level.upper()),
-        format=log_config.format,
-        handlers=[
-            logging.FileHandler(log_config.path),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
-    
+def setup_app_logging(config_manager):
+    """Set up application-specific logging."""
     return logging.getLogger(__name__)
 
 class Left4Translate:
@@ -40,8 +55,8 @@ class Left4Translate:
         self.config_manager = ConfigManager(config_path)
         self.config_manager.load_config()
         
-        # Set up logging
-        self.logger = setup_logging(self.config_manager)
+        # Set up application logging
+        self.logger = setup_app_logging(self.config_manager)
         
         # Validate configuration
         errors = self.config_manager.validate_config()
@@ -204,16 +219,7 @@ class Left4Translate:
 
 def main():
     """Application entry point."""
-    # Get the directory containing main.py
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Default config path relative to project root
-    config_path = os.path.join(base_dir, "config", "config.json")
-    
-    # Allow config path override from command line
-    if len(sys.argv) > 1:
-        config_path = sys.argv[1]
-    
+    # Config path is already set up at module level
     app = Left4Translate(config_path)
     app.start()
 
