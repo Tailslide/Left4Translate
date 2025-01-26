@@ -176,9 +176,27 @@ class TranslationService:
     def _get_slang_translations(self) -> dict:
         """Get dictionary of Spanish gaming/internet slang translations."""
         return {
+            # Gaming performance/status
             'bistec': 'buff',  # Gaming slang for strong/muscular
+            'op': 'overpowered',
+            'nerfear': 'nerf',
+            'rushear': 'rush',
+            'campear': 'camping',
+            'farmear': 'farming',
+            'lootear': 'looting',
+            'spawnear': 'spawning',
+            'lagger': 'lagging',
+            'lagueado': 'lagging',
+            'bugeado': 'bugged',
+            'rip': 'dead',
+            'f': 'rip',
+
+            # Common reactions (including regional variations)
             'ostia tio': 'holy crap dude',
             'tio': 'bro',
+            'broca': 'bro',  # Mexican slang
+            'brocoli': 'bro',  # Playful variant of broca
+            'brocha': 'bro',  # Another variant
             'vale': 'ok',
             'joder': 'damn',
             'vamos': "let's go",
@@ -187,9 +205,61 @@ class TranslationService:
             'no mames': 'no way',
             'pinche': 'freaking',
             'wey': 'dude',
+            'güey': 'dude',  # Proper spelling of wey
             'chido': 'cool',
+            'a huevo': 'hell yeah',
+            'no manches': 'no way',
+            'nel': 'nope',
+            'simon': 'yeah',
+            'neta': 'really',
+            'que onda': "what's up",
+            'equis': "whatever",
+            'x': "whatever",
+            'va': 'ok',  # Short form of vale
+            'sale': 'ok',  # Mexican slang for agreement
+            'sobres': 'alright',  # Mexican slang for agreement
+            'fierro': "let's go",  # Northern Mexican slang for enthusiasm
+
+            # Team communication
             'gg': 'good game',
-            'np': 'no problem'
+            'wp': 'well played',
+            'np': 'no problem',
+            'ez': 'easy',
+            'ayuda': 'help',
+            'cuidado': 'watch out',
+            'atras': 'behind',
+            'vienen': 'incoming',
+            'tanque': 'tank',
+            'bruja': 'witch',
+            'boomer': 'boomer',
+            'hunter': 'hunter',
+            'jockey': 'jockey',
+            'spitter': 'spitter',
+            'charger': 'charger',
+            'smoker': 'smoker',
+
+            # Game status/info
+            'afk': 'away from keyboard',
+            'brb': 'be right back',
+            'lag': 'lag',
+            'ping': 'ping',
+            'fps': 'fps',
+            'dc': 'disconnected',
+            'reconectar': 'reconnecting',
+            'bug': 'bug',
+            'glitch': 'glitch',
+            'hack': 'hack',
+            'ban': 'ban',
+            'report': 'report',
+
+            # Skill levels/performance
+            'noob': 'newbie',
+            'pro': 'pro',
+            'manco': 'noob',
+            'nivel': 'level',
+            'rank': 'rank',
+            'score': 'score',
+            'puntaje': 'score'
         }
 
     def _translate_slang(self, text: str) -> tuple[str, bool]:
@@ -204,8 +274,26 @@ class TranslationService:
         if lower_text in slang_dict:
             return slang_dict[lower_text], True
             
+        # Handle name + slang patterns (e.g., "Jason broca")
+        name_slang_patterns = {
+            'broca': 'bro',
+            'brocoli': 'bro',
+            'brocha': 'bro',
+            'wey': 'dude',
+            'güey': 'dude',
+            'tio': 'bro'
+        }
+        
+        words = text.split()  # Use original text to preserve name capitalization
+        if len(words) >= 2:
+            last_word = words[-1].lower()
+            if last_word in name_slang_patterns:
+                # Keep original name but translate the slang term
+                name_part = ' '.join(words[:-1])
+                return f"{name_part} {name_slang_patterns[last_word]}", True
+            
         # Try word by word for partial matches
-        words = lower_text.split()
+        words = lower_text.split()  # Now use lowercase for regular slang matching
         translated_words = []
         had_translation = False
         
