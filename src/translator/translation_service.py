@@ -167,6 +167,22 @@ class TranslationService:
                 
         raise Exception("Failed to acquire rate limit token")
         
+    def _preprocess_text(self, text: str) -> str:
+        """Preprocess text to help with language detection."""
+        # Common Spanish words/phrases that might be misdetected
+        spanish_indicators = [
+            'hola', 'amigo', 'que', 'como', 'estas', 'bien',
+            'gracias', 'por favor', 'si', 'ostia', 'tio',
+            'vale', 'joder', 'vamos', 'adios'
+        ]
+        
+        # Check if text contains any Spanish indicators
+        lower_text = text.lower()
+        for word in spanish_indicators:
+            if word in lower_text:
+                return 'es'  # Return Spanish language code
+        return ''  # No specific language detected
+        
     def detect_language(self, text: str) -> str:
         """
         Detect the language of the given text.
@@ -180,6 +196,11 @@ class TranslationService:
         try:
             # Clean the text first
             cleaned_text = self._clean_text(text)
+            
+            # Check for common Spanish phrases first
+            preprocessed = self._preprocess_text(cleaned_text)
+            if preprocessed:
+                return preprocessed
             data = {'q': cleaned_text}
             logging.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
             logging.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
