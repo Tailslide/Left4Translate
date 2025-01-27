@@ -80,21 +80,22 @@ class GameLogHandler(FileSystemEventHandler):
             
     def _is_system_message(self, line: str) -> bool:
         """Check if a line is a system message."""
+        # Skip empty lines first
+        if not line:
+            return True
+            
+        # Check system prefixes first - this should take priority
+        for prefix in self.SYSTEM_PREFIXES:
+            if line.startswith(prefix):
+                return True
+                
+        # Only then check if it matches chat pattern
         # Chat messages have a specific format:
         # 1. Team chat: "(Survivor|Infected) ♥Name : message"
         # 2. Regular chat: "Name : message"
         chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?[^:]+\s+:\s+.+'
         if re.match(chat_pattern, line):
             return False
-            
-        # Skip empty lines
-        if not line:
-            return True
-            
-        # Skip lines starting with system prefixes
-        for prefix in self.SYSTEM_PREFIXES:
-            if line.startswith(prefix):
-                return True
                 
         return True  # Default to treating unknown formats as system messages
             
