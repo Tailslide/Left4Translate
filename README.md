@@ -6,8 +6,8 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 
 ## Features
 
-- Real-time monitoring of L4D2 console log
-- Automatic translation of chat messages to English
+- Real-time monitoring of L4D2 console log with initial processing of last 10 chat messages
+- Automatic translation of chat messages to English in real-time
 - Support for both regular and team chat messages
 - Support for special characters and emojis in player names
 - Support for all game chat formats including infected team messages

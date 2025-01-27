@@ -50,30 +50,49 @@ class GameLogHandler(FileSystemEventHandler):
         if not event.is_directory:
             self._process_new_lines(event.src_path)
             
+    def _get_last_n_lines(self, file_path: str, n: int = 10) -> list[str]:
+        """Get the last N lines from a file that match our message pattern."""
+        matching_lines = []
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                # Read all lines and filter out system messages
+                lines = [line.strip() for line in f.readlines() if line.strip()]
+                for line in reversed(lines):  # Process lines in reverse
+                    if not self._is_system_message(line):
+                        matching_lines.append(line)
+                        if len(matching_lines) >= n:
+                            break
+                return list(reversed(matching_lines))  # Return in original order
+        except Exception as e:
+            self.logger.error(f"Error reading last {n} lines: {e}")
+            return []
+
     def _process_new_lines(self, file_path: str, from_start: bool = False):
         """Process new lines added to the log file."""
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:  # Keep utf-8 with replace for invalid chars
-                # Reset position if reading from start
-                if from_start:
-                    self.last_position = 0
-                
-                # Seek to last known position
-                f.seek(self.last_position)
-                
-                # Read new lines
-                new_lines = f.readlines()
-                self.logger.debug(f"Read {len(new_lines)} lines from file")
-                
-                # Update position
-                self.last_position = f.tell()
-                
-                # Process each new line
-                for line in new_lines:
-                    line = line.strip()
-                    if line:  # Skip empty lines
-                        self.logger.debug(f"Processing raw line: {line}")
-                        self._process_line(line)
+            if from_start:
+                # Only process last 10 chat messages when starting
+                self.logger.info("Reading last 10 chat messages...")
+                lines = self._get_last_n_lines(file_path, 10)
+                for line in lines:
+                    self._process_line(line)
+                # Set position to end of file
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    f.seek(0, 2)  # Seek to end
+                    self.last_position = f.tell()
+            else:
+                # Process new lines normally for real-time updates
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    f.seek(self.last_position)
+                    new_lines = f.readlines()
+                    self.logger.debug(f"Read {len(new_lines)} lines from file")
+                    self.last_position = f.tell()
+                    
+                    for line in new_lines:
+                        line = line.strip()
+                        if line:  # Skip empty lines
+                            self.logger.debug(f"Processing raw line: {line}")
+                            self._process_line(line)
                     
         except Exception as e:
             self.logger.error(f"Error reading log file: {e}")
