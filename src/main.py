@@ -245,9 +245,9 @@ class Left4Translate:
                 
             self.logger.info("Successfully connected to screen")
             
-            # Start monitoring game log
-            self.reader.start_monitoring()
-            self.logger.info("Started monitoring game log")
+            # Start monitoring game log, showing last 10 lines on startup
+            self.reader.start_monitoring(from_start=True)
+            self.logger.info("Started monitoring game log (showing last 10 lines)")
             
             self.logger.info("Left4Translate is running. Press Ctrl+C to stop.")
             

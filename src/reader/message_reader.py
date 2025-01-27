@@ -24,7 +24,7 @@ class GameLogHandler(FileSystemEventHandler):
     
     # System message prefixes to filter out (removed 'L ' since it's part of our log format)
     SYSTEM_PREFIXES = {
-        '-', 'Host_', 'Update', 'Unable', 'Changing', 'CAsync', 'NET_', 'String', 'Signal',
+        '- Material', '- Surface', 'Host_', 'Update', 'Unable', 'Changing', 'CAsync', 'NET_', 'String', 'Signal',
         'Map:', 'Server:', 'Build:', 'Players:', 'Commentary:', 'VSCRIPT:', 'Anniversary',
         'Steam:', 'Network:', 'RememberIPAddressForLobby:', 'CBaseClientState', 'CSteam3Client',
         'ConVarRef', 'Welcome', 'Steamgroup:', '#Cstrike', 'BinkOpen', 'Bink', 'Couldn\'t find',
