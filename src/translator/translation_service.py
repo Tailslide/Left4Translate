@@ -225,6 +225,31 @@ class TranslationService:
             'wp': 'well played',
             'np': 'no problem',
             'ez': 'easy',
+            'izi': 'ez',  # Common Spanish variant of 'ez'
+            # Base forms
+            'rico': 'nice',
+            'delicioso': 'delicious',
+            'deli': 'nice',
+            
+            # Extended forms with emphasis
+            'ricooo': 'niceee',
+            'ricxoooooo': 'niceeee',
+            'ricoo+': 'nicee+',
+            
+            # With que/q prefix
+            'q rico': 'so nice',
+            'que rico': 'so nice',
+            'q ricxoooooo': 'so niceeee',
+            
+            # Add to Spanish indicators
+            'ricx': 'nice',
+            'deli': 'nice',
+            'ricoo': 'nice',
+            'ricxo': 'nice',
+            'q ric': 'so nice',
+            'que ric': 'so nice',
+            'q ricx': 'so nice',
+            'que ricx': 'so nice',
             'ayuda': 'help',
             'cuidado': 'watch out',
             'atras': 'behind',
@@ -340,10 +365,16 @@ class TranslationService:
             # Clean the text first
             cleaned_text = self._clean_text(text)
             
-            # Check for common Spanish phrases first
+            # Try slang translation first
+            _, was_slang = self._translate_slang(cleaned_text)
+            if was_slang:
+                return 'es'  # If it's in our slang dictionary, it's Spanish
+            
+            # Check for common Spanish phrases next
             preprocessed = self._preprocess_text(cleaned_text)
             if preprocessed:
                 return preprocessed
+                
             data = {'q': cleaned_text}
             logging.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
             logging.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))

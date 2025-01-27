@@ -51,7 +51,8 @@ def main():
         # Get configurations
         game_config = config.get_game_config()
         log_path = args.log_path if args.log_path else game_config.log_path
-        message_pattern = game_config.message_format['regex']
+        # Use the game's message pattern
+        message_pattern = r'^(?:\((Survivor|Infected)\)\s+)?([^:]+?)\s+:\s+(.+)$'
         
         # Initialize translation service
         translation_config = config.get_translation_config()
@@ -81,10 +82,9 @@ def main():
                     team_str = f"({message.team}) " if message.team else ""
                     print(f"{team_str}{message.player}: {message.content}")
                     
-                    # Only translate if message contains Spanish characters or common Spanish words
-                    if (any(ord(c) > 127 for c in message.content) or
-                        any(word in message.content.lower() for word in ['soy', 'por', 'las', 'que', 'muy'])):
-                        translation = translator.translate(message.content)
+                    # Try to translate all messages
+                    translation = translator.translate(message.content)
+                    if translation != message.content:
                         print(f"Translated: {translation}")
                     print("--------------------------------------------------")
                 except Exception as e:
