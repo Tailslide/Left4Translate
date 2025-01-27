@@ -38,16 +38,18 @@ class GameLogHandler(FileSystemEventHandler):
     def __init__(
         self,
         message_pattern: Pattern[str],
-        callback: Callable[[Message], None]
+        callback: Callable[[Message], None],
+        file_path: str
     ):
         self.message_pattern = message_pattern
         self.callback = callback
         self.last_position = 0
+        self.file_path = file_path
         self.logger = logging.getLogger(__name__)
         
     def on_modified(self, event: FileModifiedEvent):
         """Called when the log file is modified."""
-        if not event.is_directory:
+        if not event.is_directory and os.path.samefile(event.src_path, self.file_path):
             self._process_new_lines(event.src_path)
             
     def _get_last_n_lines(self, file_path: str, n: int = 10) -> list[str]:
@@ -151,29 +153,24 @@ class GameLogHandler(FileSystemEventHandler):
                 self.logger.debug(f"Line matched pattern: '{line}'")
                 self.logger.debug(f"Match groups: {match.groups()}")
                 
-                # Get player name and message from the only two groups we have
-                player = match.group(1)  # First capture group is the player name
-                content = match.group(2)  # Second capture group is the message
-                
-                # Clean special characters from player name and content
-                player = self._clean_text(player)
-                content = self._clean_text(content)
-                
-                # Get team and player from match groups
-                team_type = match.group(1)  # First group is team type (Survivor/Infected)
-                player_name = match.group(2)  # Second group is player name
-                message_content = match.group(3)  # Third group is message content
-                
-                # Create message object with cleaned components
-                message = Message(
-                    line=line,
-                    team=self._clean_text(team_type) if team_type else None,  # Clean team if present
-                    player=self._clean_text(player_name),  # Clean special characters from player name
-                    content=message_content
-                )
-                
-                if message.player:  # Only send if we got a player name
-                    self.callback(message)
+                groups = match.groups()
+                if len(groups) >= 3:  # We expect at least 3 groups (team, player, message)
+                    team_type = groups[0]  # First group is team type (Survivor/Infected)
+                    player_name = groups[1]  # Second group is player name
+                    message_content = groups[2]  # Third group is message content
+                    
+                    # Create message object with cleaned components
+                    message = Message(
+                        line=line,
+                        team=self._clean_text(team_type) if team_type else None,
+                        player=self._clean_text(player_name),
+                        content=self._clean_text(message_content)
+                    )
+                    
+                    if message.player:  # Only send if we got a player name
+                        self.callback(message)
+                else:
+                    self.logger.debug(f"Not enough groups in match: {len(groups)}")
             else:
                 self.logger.debug(f"Line did not match pattern: '{line}'")
                 
@@ -193,7 +190,7 @@ class GameMessageReader:
         self.message_pattern = re.compile(message_pattern)
         self.callback = callback
         self.observer = Observer()
-        self.handler = GameLogHandler(self.message_pattern, self.callback)
+        self.handler = GameLogHandler(self.message_pattern, self.callback, str(self.log_path))
         self.running = False
         self.logger = logging.getLogger(__name__)
         
