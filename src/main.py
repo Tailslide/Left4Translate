@@ -28,12 +28,15 @@ def setup_logging(config_path: str):
     log_dir = Path(log_config.get("path", "logs/app.log")).parent
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    # Set up root logger first
+    # Force UTF-8 encoding for stdout
+    sys.stdout.reconfigure(encoding='utf-8')
+    
+    # Set up root logger with UTF-8 encoding
     logging.basicConfig(
         level=getattr(logging, log_config.get("level", "INFO").upper()),
         format=log_config.get("format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
         handlers=[
-            logging.FileHandler(log_config.get("path", "logs/app.log")),
+            logging.FileHandler(log_config.get("path", "logs/app.log"), encoding='utf-8'),
             logging.StreamHandler(sys.stdout)
         ]
     )

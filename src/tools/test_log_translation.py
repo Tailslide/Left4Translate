@@ -26,12 +26,18 @@ def main():
     
     args = parser.parse_args()
     
-    # Set up logging
+    # Set up logging with UTF-8 encoding
+    import sys
     logging.basicConfig(
         level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
     )
+    # Force UTF-8 encoding for stdout
+    sys.stdout.reconfigure(encoding='utf-8')
     logger = logging.getLogger(__name__)
     
     try:
