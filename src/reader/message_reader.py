@@ -22,9 +22,9 @@ class Message:
 class GameLogHandler(FileSystemEventHandler):
     """Handles file system events for the game log file."""
     
-    # System message prefixes to filter out
+    # System message prefixes to filter out (removed 'L ' since it's part of our log format)
     SYSTEM_PREFIXES = {
-        'Host_', 'Update', 'Unable', 'Changing', 'CAsync', 'NET_', 'L ', 'String', 'Signal',
+        'Host_', 'Update', 'Unable', 'Changing', 'CAsync', 'NET_', 'String', 'Signal',
         'Map:', 'Server:', 'Build:', 'Players:', 'Commentary:', 'VSCRIPT:', 'Anniversary',
         'Steam:', 'Network:', 'RememberIPAddressForLobby:', 'CBaseClientState', 'CSteam3Client',
         'ConVarRef', 'Welcome', 'Steamgroup:', '#Cstrike', 'BinkOpen', 'Bink', 'Couldn\'t find',
@@ -53,7 +53,7 @@ class GameLogHandler(FileSystemEventHandler):
     def _process_new_lines(self, file_path: str, from_start: bool = False):
         """Process new lines added to the log file."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as f:  # Keep utf-8 with replace for invalid chars
                 # Reset position if reading from start
                 if from_start:
                     self.last_position = 0
@@ -63,6 +63,7 @@ class GameLogHandler(FileSystemEventHandler):
                 
                 # Read new lines
                 new_lines = f.readlines()
+                self.logger.debug(f"Read {len(new_lines)} lines from file")
                 
                 # Update position
                 self.last_position = f.tell()
@@ -71,6 +72,7 @@ class GameLogHandler(FileSystemEventHandler):
                 for line in new_lines:
                     line = line.strip()
                     if line:  # Skip empty lines
+                        self.logger.debug(f"Processing raw line: {line}")
                         self._process_line(line)
                     
         except Exception as e:
@@ -78,8 +80,15 @@ class GameLogHandler(FileSystemEventHandler):
             
     def _is_system_message(self, line: str) -> bool:
         """Check if a line is a system message."""
-        # Skip empty lines and lines without a colon
-        if not line or ':' not in line:
+        # Chat messages have a specific format:
+        # 1. Team chat: "(Survivor|Infected) ♥Name : message"
+        # 2. Regular chat: "Name : message"
+        chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?[^:]+\s+:\s+.+'
+        if re.match(chat_pattern, line):
+            return False
+            
+        # Skip empty lines
+        if not line:
             return True
             
         # Skip lines starting with system prefixes
@@ -87,18 +96,13 @@ class GameLogHandler(FileSystemEventHandler):
             if line.startswith(prefix):
                 return True
                 
-        # Skip lines that look like system paths or commands
-        if any(x in line for x in ['\\', '/', '.exe', '.dll', '.txt', '.dat', '.cfg', '.vmt', '.wav', '.bik']):
-            return True
+        return True  # Default to treating unknown formats as system messages
             
-        # Skip lines that look like system messages
-        if any(x in line for x in ['socket', 'handle', 'dictionary', 'whitelist', 'lightmaps']):
-            return True
-            
-        return False
-            
-    def _clean_text(self, text: str) -> str:
+    def _clean_text(self, text: str | None) -> str | None:
         """Remove special characters from text."""
+        if text is None:
+            return None
+            
         # Remove heart emoji
         text = text.replace('♥', '')
         # Remove smiley emoji
@@ -122,24 +126,30 @@ class GameLogHandler(FileSystemEventHandler):
             
             # Check if it matches our pattern
             match = re.match(self.message_pattern, line)
+            self.logger.debug(f"Regex pattern: {self.message_pattern.pattern}")
             if match:
                 self.logger.debug(f"Line matched pattern: '{line}'")
+                self.logger.debug(f"Match groups: {match.groups()}")
                 
-                # Get player name from appropriate group
-                player = match.group(2) if match.group(2) else match.group(4)
-                # Get message content from appropriate group
-                content = match.group(3) if match.group(3) else match.group(5)
+                # Get player name and message from the only two groups we have
+                player = match.group(1)  # First capture group is the player name
+                content = match.group(2)  # Second capture group is the message
                 
                 # Clean special characters from player name and content
                 player = self._clean_text(player)
                 content = self._clean_text(content)
                 
+                # Get team and player from match groups
+                team_type = match.group(1)  # First group is team type (Survivor/Infected)
+                player_name = match.group(2)  # Second group is player name
+                message_content = match.group(3)  # Third group is message content
+                
                 # Create message object with cleaned components
                 message = Message(
                     line=line,
-                    team=match.group(1),  # Team is always group 1 if present
-                    player=player,
-                    content=content
+                    team=self._clean_text(team_type) if team_type else None,  # Clean team if present
+                    player=self._clean_text(player_name),  # Clean special characters from player name
+                    content=message_content
                 )
                 
                 if message.player:  # Only send if we got a player name

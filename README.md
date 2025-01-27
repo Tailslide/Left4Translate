@@ -11,7 +11,9 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 - Support for both regular and team chat messages
 - Support for special characters and emojis in player names
 - Support for all game chat formats including infected team messages
-- Smart translation of gaming slang and casual expressions with extensive Spanish gaming dictionary:
+- Improved chat message detection with UTF-8 encoding support and error handling
+- Fixed handling of special characters in player names and messages
+- Smart translation of gaming slang and casual expressions with extensive Spanish gaming dictionary and context-aware translations:
   * Game mechanics: "rushear" → "rush", "campear" → "camping", "farmear" → "farming"
   * Special infected: "bruja" → "witch", "tanque" → "tank"
   * Status/actions: "cuidado" → "watch out", "vienen" → "incoming"
@@ -108,6 +110,35 @@ The `config.json` file contains all settings:
 1. Start Left 4 Dead 2
 2. Enable console logging: `con_logfile console.log`
 3. Run the translator: `python src/main.py`
+
+## Testing Translations
+
+To test the translation functionality:
+
+1. Use the test script: `python src/tools/test_log_translation.py --read-once --from-start --log-path "path/to/console.log"`
+2. Options:
+   - `--read-once`: Read existing content and exit
+   - `--from-start`: Start reading from beginning of file
+   - `--log-path`: Path to log file (overrides config)
+   - `--timeout`: Stop after N seconds (0 for no timeout)
+
+Example translations:
+```
+(Survivor) Player: soy tu fan
+Translated: I'm your fan
+
+(Infected) Player: por las tetas de alfredo no mms
+Translated: for alfredo's tits no mms
+
+(Survivor) Player: di lo mejor que tenia
+Translated: I gave my best
+```
+
+The test script helps verify:
+- Message detection and parsing
+- Special character handling
+- Translation API connectivity
+- Context-aware translations
 
 ## Message Format Support
 

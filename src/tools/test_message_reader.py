@@ -2,6 +2,7 @@
 import json
 import sys
 import time
+import logging
 from pathlib import Path
 import argparse
 
@@ -19,12 +20,21 @@ def message_callback(message: Message):
     print(f"Content: {message.content}")
     print("-" * 50)
 
+def setup_logging():
+    """Configure logging for testing."""
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
 def main():
     """Test the message reader functionality."""
+    setup_logging()
     parser = argparse.ArgumentParser(description='Test message reader with optional timeout')
     parser.add_argument('--timeout', type=int, default=0, help='Stop after N seconds (0 for no timeout)')
     parser.add_argument('--read-once', action='store_true', help='Read existing log content and exit')
     parser.add_argument('--from-start', action='store_true', help='Start reading from beginning of file')
+    parser.add_argument('--log-path', help='Path to log file to test (overrides config)')
     args = parser.parse_args()
 
     try:
@@ -42,7 +52,7 @@ def main():
         
         # Get game configuration
         game_config = config_manager.get_game_config()
-        log_path = game_config.log_path
+        log_path = args.log_path if args.log_path else game_config.log_path
         message_pattern = game_config.message_format["regex"]
         
         print(f"Starting message reader test...")

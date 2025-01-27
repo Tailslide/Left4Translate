@@ -5,7 +5,10 @@ Run these tests manually when needed to verify API integration.
 """
 
 import unittest
-from src.translator.translation_service import TranslationService
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from translator.translation_service import TranslationService
 import os
 import json
 

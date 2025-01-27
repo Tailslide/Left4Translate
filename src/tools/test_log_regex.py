@@ -21,11 +21,13 @@ import re
 # (.+)                 Message content
 # $                    End of line
 PATTERN = (
-    r'^(?:\((Survivor|Infected)\)[ ])?'  # Note: exactly one space after )
-    r'((?!Host_|Update|Unable|Changing|CAsync|NET_|L\s|String|Signal|Map|Server|Build|Players|'
-    r'Commentary|VSCRIPT|Anniversary|Steam|Network|RememberIPAddressForLobby)'
-    r'[\x03]?[A-Za-z][A-Za-z0-9\s\x01\x03]{2,}?)'
-    r'[ ]+:[ ][ ]+(.+)$'  # Exact spacing from log
+    r'^(?:\((Survivor|Infected)\)\s+)?'  # Team prefix
+    r'(?!.*(?:CBase|CSteam|CAsync|Map:|Players:|Build:|Server\s+Number|Unable\s+to|Update|RememberIPAddressForLobby|BinkOpen))'  # System messages
+    r'((?:(?:\s*♥?(?:\([A-Za-z]+\))?\s*)*'  # Handle repeated team/name parts
+    r'[\x03♥]?[A-Za-z][A-Za-z0-9\s\x01\x03♥☺()\s]{2,}?))'  # Player name (added () to allowed chars)
+    r'\s*:\s*'  # Colon separator
+    r'(?!.*(?:FileReceived|InitiateConnection|Damage\s+(?:Given|Taken)|\.wavs\s+total|\.(bik|wav|cfg)))'  # System message content
+    r'(.+)$'  # Message content
 )
 
 def test_chat_pattern(line):
@@ -52,7 +54,7 @@ def main():
     print("\nResults:")
     
     try:
-        with open(log_path, 'r', encoding='utf-8') as f:
+        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
             lines = f.readlines()
             
         total_lines = len(lines)
