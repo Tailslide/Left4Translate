@@ -73,15 +73,15 @@ class GameLogHandler(FileSystemEventHandler):
         """Process new lines added to the log file."""
         try:
             if from_start:
+                # Set position to end of file first
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    f.seek(0, 2)  # Seek to end
+                    self.last_position = f.tell()
                 # Only process last 10 chat messages when starting
                 self.logger.info("Reading last 10 chat messages...")
                 lines = self._get_last_n_lines(file_path, 10)
                 for line in lines:
                     self._process_line(line)
-                # Set position to end of file
-                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-                    f.seek(0, 2)  # Seek to end
-                    self.last_position = f.tell()
             else:
                 # Process new lines normally for real-time updates
                 with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
