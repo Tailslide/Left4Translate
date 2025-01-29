@@ -171,5 +171,28 @@ class TestTranslationService(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 1)  # Only detection, no translation
         self.assertEqual(result, "Hello")
 
+    @patch('requests.post')
+    def test_mixed_slang_translation(self, mock_post):
+        """Test translation of phrases containing both regular words and slang."""
+        # Mock Google Translate to return the same text for untranslatable words
+        mock_response = Mock()
+        mock_response.json.return_value = {
+            'data': {
+                'translations': [{'translatedText': 'ptm I am black'}]}
+        }
+        mock_post.return_value = mock_response
+        
+        # Test that slang words are translated after Google Translate
+        result = self.service.translate("ptm soy negro", source_language="es")
+        self.assertEqual(result, "damn I am black")
+        
+        # Test another mixed phrase
+        mock_response.json.return_value = {
+            'data': {
+                'translations': [{'translatedText': 'the manco is here'}]}
+        }
+        result = self.service.translate("el manco esta aqui", source_language="es")
+        self.assertEqual(result, "the noob is here")
+
 if __name__ == '__main__':
     unittest.main()

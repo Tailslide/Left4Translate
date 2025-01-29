@@ -201,20 +201,18 @@ class TranslationService:
                 name_part = ' '.join(words[:-1])
                 return f"{name_part} {name_slang_patterns[last_word]}", True
         
-        # Try word by word for partial matches
-        words = lower_text.split()  # Now use lowercase for regular slang matching
-        translated_words = []
-        had_translation = False
-        
-        for word in words:
-            if word in slang_dict:
-                translated_words.append(slang_dict[word])
-                had_translation = True
-            else:
-                translated_words.append(word)
-        
-        if had_translation:
-            return ' '.join(translated_words), True
+        # First check for exact matches
+        if lower_text in slang_dict:
+            return slang_dict[lower_text], True
+            
+        # Then check if it's a single word
+        if ' ' not in lower_text:
+            # If it's a single word and it's in our slang dictionary, translate it
+            if lower_text in slang_dict:
+                return slang_dict[lower_text], True
+            
+        # Don't translate slang words that are part of larger phrases
+        return text, False
         
         return text, False
 
@@ -269,7 +267,7 @@ class TranslationService:
                         logging.debug(f"Skipping translation for short text: '{text}'")
                         return text
                         
-                    # Try slang translation first
+                    # Try to translate the entire phrase as slang first
                     slang_translated, was_slang = self._translate_slang(cleaned_text)
                     if was_slang:
                         logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
@@ -319,12 +317,25 @@ class TranslationService:
                     translated_text = result['data']['translations'][0]['translatedText']
                     # Decode HTML entities (like &#39; to ')
                     decoded_text = html.unescape(translated_text)
-                    logging.debug(f"Successfully translated text. Length: {len(decoded_text)} characters")
                     
-                    # Cache the decoded result
-                    self.cache[cache_key] = decoded_text
+                    # Check if any words in the original text match our slang dictionary
+                    # and weren't translated by Google Translate
+                    original_words = cleaned_text.split()
+                    translated_words = decoded_text.split()
                     
-                    return decoded_text
+                    # Only substitute slang if Google Translate didn't change the word
+                    slang_dict = self._get_slang_translations()
+                    for i, (orig, trans) in enumerate(zip(original_words, translated_words)):
+                        if orig.lower() == trans.lower() and orig.lower() in slang_dict:
+                            translated_words[i] = slang_dict[orig.lower()]
+                    
+                    final_text = ' '.join(translated_words)
+                    logging.debug(f"Successfully translated text. Length: {len(final_text)} characters")
+                    
+                    # Cache the final result
+                    self.cache[cache_key] = final_text
+                    
+                    return final_text
                     
                 except requests.exceptions.HTTPError as e:
                     attempts += 1

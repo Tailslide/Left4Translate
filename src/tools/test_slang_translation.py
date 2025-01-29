@@ -54,10 +54,23 @@ class TestSlangTranslation(unittest.TestCase):
             "a huevo": "hell yeah",
             "no mames": "no way"
         }
-        for input_text, expected in test_cases.items():
+        
+    def test_mixed_slang(self):
+        """Test phrases containing both slang and regular words."""
+        # Test mixed phrases (should not be handled by _translate_slang)
+        mixed_cases = {
+            "ptm soy negro": "ptm soy negro",
+            "el manco esta aqui": "el manco esta aqui"
+        }
+        for input_text, expected in mixed_cases.items():
             result, was_slang = self.service._translate_slang(input_text)
-            self.assertTrue(was_slang)
-            self.assertEqual(result, expected)
+            self.assertFalse(was_slang, f"Mixed phrase should not be handled: {input_text}")
+            self.assertEqual(result, expected, f"Mixed phrase should not be modified: {input_text}")
+
+        # Test standalone slang word (should be handled by _translate_slang)
+        result, was_slang = self.service._translate_slang("manco")
+        self.assertTrue(was_slang, "Standalone slang word should be handled")
+        self.assertEqual(result, "noob", "Standalone slang word should be translated")
 
 if __name__ == '__main__':
     unittest.main()
