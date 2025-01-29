@@ -18,7 +18,7 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
   * Game mechanics: "rushear" → "rush", "campear" → "camping", "farmear" → "farming"
   * Special infected: "bruja" → "witch", "tanque" → "tank"
   * Status/actions: "cuidado" → "watch out", "vienen" → "incoming"
-  * Reactions: "ostia tio" → "holy crap dude", "a huevo" → "hell yeah"
+  * Reactions: "ostia tio" → "holy crap dude", "a huevo" → "hell yeah", "si" → "yeah" (only as standalone or in "eso si")
   * Performance: "bistec" → "buff", "manco" → "noob", "pro" → "pro"
   * Technical terms: "lagueado" → "lagging", "bugeado" → "bugged"
 - Display of translated messages on a Turing Smart Screen

@@ -65,6 +65,196 @@ class TranslationService:
         logging.debug(f"Cleaned text: '{text}' -> '{cleaned}'")
         return cleaned
 
+    def _get_slang_translations(self) -> dict:
+        """Get dictionary of Spanish gaming/internet slang translations."""
+        return {
+            # Gaming performance/status
+            'bistec': 'buff',  # Gaming slang for strong/muscular
+            'op': 'overpowered',
+            'nerfear': 'nerf',
+            'rushear': 'rush',
+            'ptm': 'damn',  # Spanish gaming slang expletive
+            'campear': 'camping',
+            'farmear': 'farming',
+            'lootear': 'looting',
+            'spawnear': 'spawning',
+            'lagger': 'lagging',
+            'lagueado': 'lagging',
+            'bugeado': 'bugged',
+            'rip': 'dead',
+            'f': 'rip',
+
+            # Common reactions and affirmations
+            'si': 'yeah',
+            'eso si': 'yeah',  # Common affirmation
+            'ostia tio': 'holy crap dude',
+            'tio': 'bro',
+            'broca': 'bro',  # Mexican slang
+            'brocoli': 'bro',  # Playful variant of broca
+            'brocha': 'bro',  # Another variant
+            'vale': 'ok',
+            'joder': 'damn',
+            'vamos': "let's go",
+            'que pasa': "what's up",
+            'no mames': 'no way',
+            'pinche': 'freaking',
+            'wey': 'dude',
+            'güey': 'dude',  # Proper spelling of wey
+            'chido': 'cool',
+            'a huevo': 'hell yeah',
+            'no manches': 'no way',
+            'nel': 'nope',
+            'simon': 'yeah',
+            'neta': 'really',
+            'que onda': "what's up",
+            'equis': "whatever",
+            'x': "whatever",
+            'va': 'ok',  # Short form of vale
+            'sale': 'ok',  # Mexican slang for agreement
+            'sobres': 'alright',  # Mexican slang for agreement
+            'fierro': "let's go",  # Northern Mexican slang for enthusiasm
+
+            # Team communication
+            'gg': 'good game',
+            'wp': 'well played',
+            'np': 'no problem',
+            'ez': 'easy',
+            'izi': 'ez',  # Common Spanish variant of 'ez'
+            
+            # Base forms
+            'rico': 'nice',
+            'delicioso': 'delicious',
+            'deli': 'nice',
+            
+            # Extended forms with emphasis
+            'ricooo': 'niceee',
+            'ricxoooooo': 'niceeee',
+            'ricoo+': 'nicee+',
+            
+            # With que/q prefix
+            'q rico': 'so nice',
+            'que rico': 'so nice',
+            'q ricxoooooo': 'so niceeee',
+            
+            # Add to Spanish indicators
+            'ricx': 'nice',
+            'deli': 'nice',
+            'ricoo': 'nice',
+            'ricxo': 'nice',
+            'q ric': 'so nice',
+            'que ric': 'so nice',
+            'q ricx': 'so nice',
+            'que ricx': 'so nice',
+            'ayuda': 'help',
+            'cuidado': 'watch out',
+            'atras': 'behind',
+            'vienen': 'incoming',
+            'tanque': 'tank',
+            'bruja': 'witch',
+            'boomer': 'boomer',
+            'hunter': 'hunter',
+            'jockey': 'jockey',
+            'spitter': 'spitter',
+            'charger': 'charger',
+            'smoker': 'smoker',
+
+            # Game status/info
+            'afk': 'away from keyboard',
+            'brb': 'be right back',
+            'lag': 'lag',
+            'ping': 'ping',
+            'fps': 'fps',
+            'dc': 'disconnected',
+            'reconectar': 'reconnecting',
+            'bug': 'bug',
+            'glitch': 'glitch',
+            'hack': 'hack',
+            'ban': 'ban',
+            'report': 'report',
+
+            # Skill levels/performance
+            'noob': 'newbie',
+            'pro': 'pro',
+            'manco': 'noob',
+            'nivel': 'level',
+            'rank': 'rank',
+            'score': 'score',
+            'puntaje': 'score'
+        }
+
+    def _translate_slang(self, text: str) -> tuple[str, bool]:
+        """
+        Attempt to translate common gaming/internet slang.
+        Returns tuple of (translated_text, was_translated).
+        """
+        slang_dict = self._get_slang_translations()
+        lower_text = text.lower().strip()
+        words = lower_text.split()
+        
+        # Only translate 'si' or 'eso si' as standalone phrases
+        if lower_text == 'si' or lower_text == 'eso si':
+            return slang_dict.get(lower_text, text), True
+            
+        # Don't translate 'si' when it's part of a larger phrase
+        if 'si' in words and len(words) > 1:
+            slang_dict = {k: v for k, v in slang_dict.items() if k != 'si'}
+        
+        # Try exact matches first for other phrases
+        if lower_text in slang_dict:
+            return slang_dict[lower_text], True
+        
+        # Handle name + slang patterns (e.g., "Jason broca")
+        name_slang_patterns = {
+            'broca': 'bro',
+            'brocoli': 'bro',
+            'brocha': 'bro',
+            'wey': 'dude',
+            'güey': 'dude',
+            'tio': 'bro'
+        }
+        
+        words = text.split()  # Use original text to preserve name capitalization
+        if len(words) >= 2:
+            last_word = words[-1].lower()
+            if last_word in name_slang_patterns:
+                # Keep original name but translate the slang term
+                name_part = ' '.join(words[:-1])
+                return f"{name_part} {name_slang_patterns[last_word]}", True
+        
+        # Try word by word for partial matches
+        words = lower_text.split()  # Now use lowercase for regular slang matching
+        translated_words = []
+        had_translation = False
+        
+        for word in words:
+            if word in slang_dict:
+                translated_words.append(slang_dict[word])
+                had_translation = True
+            else:
+                translated_words.append(word)
+        
+        if had_translation:
+            return ' '.join(translated_words), True
+        
+        return text, False
+
+    def _preprocess_text(self, text: str) -> str:
+        """Preprocess text to help with language detection."""
+        # Common Spanish words/phrases that might be misdetected
+        spanish_indicators = [
+            'hola', 'amigo', 'que', 'como', 'estas', 'bien',
+            'gracias', 'por favor', 'ostia', 'tio',  # Removed 'si' from indicators
+            'vale', 'joder', 'vamos', 'adios', 'wey', 'chido',
+            'pinche', 'mames', 'bistec'
+        ]
+        
+        # Check if text contains any Spanish indicators
+        lower_text = text.lower()
+        for word in spanish_indicators:
+            if word in lower_text:
+                return 'es'  # Return Spanish language code
+        return ''  # No specific language detected
+
     def translate(
         self,
         text: str,
@@ -172,184 +362,6 @@ class TranslationService:
                 time.sleep(0.1)  # Wait for rate limit
                 
         raise Exception("Failed to acquire rate limit token")
-        
-    def _get_slang_translations(self) -> dict:
-        """Get dictionary of Spanish gaming/internet slang translations."""
-        return {
-            # Gaming performance/status
-            'bistec': 'buff',  # Gaming slang for strong/muscular
-            'op': 'overpowered',
-            'nerfear': 'nerf',
-            'rushear': 'rush',
-            'campear': 'camping',
-            'farmear': 'farming',
-            'lootear': 'looting',
-            'spawnear': 'spawning',
-            'lagger': 'lagging',
-            'lagueado': 'lagging',
-            'bugeado': 'bugged',
-            'rip': 'dead',
-            'f': 'rip',
-
-            # Common reactions (including regional variations)
-            'ostia tio': 'holy crap dude',
-            'tio': 'bro',
-            'broca': 'bro',  # Mexican slang
-            'brocoli': 'bro',  # Playful variant of broca
-            'brocha': 'bro',  # Another variant
-            'vale': 'ok',
-            'joder': 'damn',
-            'vamos': "let's go",
-            'que pasa': "what's up",
-            'si': 'yeah',
-            'no mames': 'no way',
-            'pinche': 'freaking',
-            'wey': 'dude',
-            'güey': 'dude',  # Proper spelling of wey
-            'chido': 'cool',
-            'a huevo': 'hell yeah',
-            'no manches': 'no way',
-            'nel': 'nope',
-            'simon': 'yeah',
-            'neta': 'really',
-            'que onda': "what's up",
-            'equis': "whatever",
-            'x': "whatever",
-            'va': 'ok',  # Short form of vale
-            'sale': 'ok',  # Mexican slang for agreement
-            'sobres': 'alright',  # Mexican slang for agreement
-            'fierro': "let's go",  # Northern Mexican slang for enthusiasm
-
-            # Team communication
-            'gg': 'good game',
-            'wp': 'well played',
-            'np': 'no problem',
-            'ez': 'easy',
-            'izi': 'ez',  # Common Spanish variant of 'ez'
-            # Base forms
-            'rico': 'nice',
-            'delicioso': 'delicious',
-            'deli': 'nice',
-            
-            # Extended forms with emphasis
-            'ricooo': 'niceee',
-            'ricxoooooo': 'niceeee',
-            'ricoo+': 'nicee+',
-            
-            # With que/q prefix
-            'q rico': 'so nice',
-            'que rico': 'so nice',
-            'q ricxoooooo': 'so niceeee',
-            
-            # Add to Spanish indicators
-            'ricx': 'nice',
-            'deli': 'nice',
-            'ricoo': 'nice',
-            'ricxo': 'nice',
-            'q ric': 'so nice',
-            'que ric': 'so nice',
-            'q ricx': 'so nice',
-            'que ricx': 'so nice',
-            'ayuda': 'help',
-            'cuidado': 'watch out',
-            'atras': 'behind',
-            'vienen': 'incoming',
-            'tanque': 'tank',
-            'bruja': 'witch',
-            'boomer': 'boomer',
-            'hunter': 'hunter',
-            'jockey': 'jockey',
-            'spitter': 'spitter',
-            'charger': 'charger',
-            'smoker': 'smoker',
-
-            # Game status/info
-            'afk': 'away from keyboard',
-            'brb': 'be right back',
-            'lag': 'lag',
-            'ping': 'ping',
-            'fps': 'fps',
-            'dc': 'disconnected',
-            'reconectar': 'reconnecting',
-            'bug': 'bug',
-            'glitch': 'glitch',
-            'hack': 'hack',
-            'ban': 'ban',
-            'report': 'report',
-
-            # Skill levels/performance
-            'noob': 'newbie',
-            'pro': 'pro',
-            'manco': 'noob',
-            'nivel': 'level',
-            'rank': 'rank',
-            'score': 'score',
-            'puntaje': 'score'
-        }
-
-    def _translate_slang(self, text: str) -> tuple[str, bool]:
-        """
-        Attempt to translate common gaming/internet slang.
-        Returns tuple of (translated_text, was_translated).
-        """
-        slang_dict = self._get_slang_translations()
-        lower_text = text.lower().strip()
-        
-        # Try exact matches first
-        if lower_text in slang_dict:
-            return slang_dict[lower_text], True
-            
-        # Handle name + slang patterns (e.g., "Jason broca")
-        name_slang_patterns = {
-            'broca': 'bro',
-            'brocoli': 'bro',
-            'brocha': 'bro',
-            'wey': 'dude',
-            'güey': 'dude',
-            'tio': 'bro'
-        }
-        
-        words = text.split()  # Use original text to preserve name capitalization
-        if len(words) >= 2:
-            last_word = words[-1].lower()
-            if last_word in name_slang_patterns:
-                # Keep original name but translate the slang term
-                name_part = ' '.join(words[:-1])
-                return f"{name_part} {name_slang_patterns[last_word]}", True
-            
-        # Try word by word for partial matches
-        words = lower_text.split()  # Now use lowercase for regular slang matching
-        translated_words = []
-        had_translation = False
-        
-        for word in words:
-            if word in slang_dict:
-                translated_words.append(slang_dict[word])
-                had_translation = True
-            else:
-                translated_words.append(word)
-                
-        if had_translation:
-            return ' '.join(translated_words), True
-            
-        return text, False
-
-    def _preprocess_text(self, text: str) -> str:
-        """Preprocess text to help with language detection."""
-        # Common Spanish words/phrases that might be misdetected
-        spanish_indicators = [
-            'hola', 'amigo', 'que', 'como', 'estas', 'bien',
-            'gracias', 'por favor', 'si', 'ostia', 'tio',
-            'vale', 'joder', 'vamos', 'adios', 'wey', 'chido',
-            'pinche', 'mames', 'bistec'
-        ]
-        
-        # Check if text contains any Spanish indicators
-        lower_text = text.lower()
-        for word in spanish_indicators:
-            if word in lower_text:
-                return 'es'  # Return Spanish language code
-        return ''  # No specific language detected
         
     def detect_language(self, text: str) -> str:
         """
