@@ -93,6 +93,7 @@ class TranslationService:
             'brocoli': 'bro',  # Playful variant of broca
             'brocha': 'bro',  # Another variant
             'vale': 'ok',
+            
             'joder': 'damn',
             'vamos': "let's go",
             'que pasa': "what's up",
@@ -151,35 +152,14 @@ class TranslationService:
             'vienen': 'incoming',
             'tanque': 'tank',
             'bruja': 'witch',
-            'boomer': 'boomer',
-            'hunter': 'hunter',
-            'jockey': 'jockey',
-            'spitter': 'spitter',
-            'charger': 'charger',
-            'smoker': 'smoker',
-
-            # Game status/info
-            'afk': 'away from keyboard',
-            'brb': 'be right back',
-            'lag': 'lag',
-            'ping': 'ping',
-            'fps': 'fps',
-            'dc': 'disconnected',
-            'reconectar': 'reconnecting',
-            'bug': 'bug',
-            'glitch': 'glitch',
-            'hack': 'hack',
-            'ban': 'ban',
-            'report': 'report',
-
-            # Skill levels/performance
-            'noob': 'newbie',
-            'pro': 'pro',
+            
+            # Only unique Spanish gaming slang and expressions that differ from English
             'manco': 'noob',
-            'nivel': 'level',
-            'rank': 'rank',
-            'score': 'score',
-            'puntaje': 'score'
+            'puntaje': 'score',
+            'reconectar': 'reconnecting',
+            'ostia tio': 'holy crap dude',
+            'a huevo': 'hell yeah',
+            'no mames': 'no way'
         }
 
     def _translate_slang(self, text: str) -> tuple[str, bool]:

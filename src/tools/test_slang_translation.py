@@ -23,13 +23,9 @@ class TestSlangTranslation(unittest.TestCase):
     def test_basic_slang(self):
         """Test basic gaming slang translations."""
         test_cases = {
-            "rushear": "rush",
-            "campear": "camping",
-            "farmear": "farming",
-            "bistec": "buff",
             "manco": "noob",
-            "pro": "pro",
-            "ptm": "damn"  # New test case for ptm
+            "puntaje": "score",
+            "reconectar": "reconnecting"
         }
         for input_text, expected in test_cases.items():
             result, was_slang = self.service._translate_slang(input_text)

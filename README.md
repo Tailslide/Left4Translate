@@ -17,10 +17,9 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 - Smart translation of gaming slang and casual expressions with extensive Spanish gaming dictionary and context-aware translations:
   * Game mechanics: "rushear" → "rush", "campear" → "camping", "farmear" → "farming"
   * Special infected: "bruja" → "witch", "tanque" → "tank"
-  * Status/actions: "cuidado" → "watch out", "vienen" → "incoming"
-  * Reactions: "ostia tio" → "holy crap dude", "a huevo" → "hell yeah", "si" → "yeah" (only as standalone or in "eso si")
-  * Performance: "bistec" → "buff", "manco" → "noob", "pro" → "pro"
-  * Technical terms: "lagueado" → "lagging", "bugeado" → "bugged"
+  * Unique Spanish gaming slang and expressions that wouldn't be properly translated by Google Translate:
+    * Gaming terms: "manco" → "noob", "puntaje" → "score", "reconectar" → "reconnecting"
+    * Reactions: "ostia tio" → "holy crap dude", "a huevo" → "hell yeah", "no mames" → "no way", "si" → "yeah" (only as standalone or in "eso si")
 - Display of translated messages on a Turing Smart Screen
 - Message caching to reduce API calls
 - Rate limiting to prevent API overuse
