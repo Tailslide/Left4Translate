@@ -116,10 +116,6 @@ class TranslationService:
             'fierro': "let's go",  # Northern Mexican slang for enthusiasm
 
             # Team communication
-            'gg': 'good game',
-            'wp': 'well played',
-            'np': 'no problem',
-            'ez': 'easy',
             'izi': 'ez',  # Common Spanish variant of 'ez'
             
             # Base forms
