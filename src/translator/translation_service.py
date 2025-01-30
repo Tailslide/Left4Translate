@@ -258,9 +258,9 @@ class TranslationService:
         while attempts < self.retry_attempts:
             if self.rate_limiter.acquire():
                 try:
-                    # Skip translation for very short text
-                    if len(cleaned_text) <= 1:
-                        logging.debug(f"Skipping translation for short text: '{text}'")
+                    # Skip translation for very short text or text containing only punctuation/special chars
+                    if len(cleaned_text) <= 1 or not any(c.isalnum() for c in cleaned_text):
+                        logging.debug(f"Skipping translation for short/non-text content: '{text}'")
                         return text
                         
                     # Try to translate the entire phrase as slang first
