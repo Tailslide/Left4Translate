@@ -151,6 +151,8 @@ The application supports various chat message formats:
 - Names with special characters: `♥PlayerName☺`
 - Messages with emojis and special characters
 
+Note: Due to limitations in Left 4 Dead 2's console logging system, chat messages from players with certain Unicode or special characters in their names may not be written to the console.log file at all. This is a game engine limitation and not an issue with the translation system. The game supports displaying these characters in-game, but they may not be captured in the log file for translation.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
