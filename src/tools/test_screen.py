@@ -76,17 +76,25 @@ def test_screen():
         )
         time.sleep(2)
         
-        # Test message 3
-        print("Sending message 3...")
+        # Test message 3 - Test word wrapping with a long message
+        print("Sending message 3 (testing word wrapping)...")
         screen.display_message(
             player="Left4Translate",
-            original="Тестирование завершено",
-            translated="Test complete"
+            original="This is a very long message that should automatically wrap to the next line because it exceeds the screen width",
+            translated="Este es un mensaje muy largo que debería ajustarse automáticamente a la siguiente línea porque excede el ancho de la pantalla"
+        )
+        
+        # Test message 4 - Test word wrapping with special characters
+        print("Sending message 4 (testing word wrapping with special characters)...")
+        screen.display_message(
+            player="♥Player☺",
+            original="Тестирование длинного сообщения с автоматическим переносом строки и специальными символами",
+            translated="Testing a long message with automatic word wrapping and special characters"
         )
         
         # Wait for messages to display
-        print("Messages sent to display. Waiting 10 seconds...")
-        time.sleep(10)
+        print("Messages sent to display. Waiting 15 seconds...")
+        time.sleep(15)
         
         print("Test completed successfully")
         

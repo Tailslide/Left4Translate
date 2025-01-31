@@ -182,11 +182,51 @@ class ScreenController:
         
         return name
             
-    def _calculate_message_height(self, message: DisplayMessage) -> int:
+    def _wrap_text(self, text: str, max_width: int, draw: ImageDraw.Draw, font: ImageFont.FreeTypeFont) -> list[str]:
+        """Wrap text to fit within a given width."""
+        words = text.split()
+        lines = []
+        current_line = []
+        current_width = 0
+
+        for word in words:
+            word_width = draw.textlength(word, font=font)
+            space_width = draw.textlength(" ", font=font)
+            
+            if current_line and current_width + word_width + space_width > max_width:
+                lines.append(" ".join(current_line))
+                current_line = [word]
+                current_width = word_width
+            else:
+                if current_line:
+                    current_width += space_width
+                current_line.append(word)
+                current_width += word_width
+        
+        if current_line:
+            lines.append(" ".join(current_line))
+        
+        return lines if lines else [""]  # Return at least one empty line
+
+    def _calculate_message_height(self, message: DisplayMessage, draw: ImageDraw.Draw) -> int:
         """Calculate total height needed for a message including spacing."""
-        if message.original == message.translated:
-            return self.LINE_HEIGHT + self.MESSAGE_SPACING
-        return (self.LINE_HEIGHT * 2) + self.MESSAGE_SPACING
+        # Calculate available width for text (screen width minus margins and player name)
+        player_text = f"[{message.player}]"
+        player_width = draw.textlength(player_text, font=self.font_bold)
+        available_width = 480 - (self.margin * 2 + 5) - player_width - 5  # Screen width minus margins and player section
+
+        # Calculate wrapped lines for original and translated text
+        original_lines = self._wrap_text(message.original, available_width, draw, self.font)
+        original_height = len(original_lines) * self.LINE_HEIGHT
+
+        if message.original != message.translated:
+            # For translations, account for the arrow indent
+            translation_width = available_width - 30  # Account for arrow and indent
+            translated_lines = self._wrap_text(message.translated, translation_width, draw, self.font)
+            translated_height = len(translated_lines) * self.LINE_HEIGHT
+            return original_height + translated_height + self.MESSAGE_SPACING
+        
+        return original_height + self.MESSAGE_SPACING
             
     def display_message(
         self,
@@ -210,13 +250,17 @@ class ScreenController:
             expiry=datetime.fromtimestamp(now.timestamp() + self.message_timeout / 1000) if self.message_timeout > 0 else None
         )
         
+        # Create temporary draw context for height calculations
+        temp_buffer = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
+        draw = ImageDraw.Draw(temp_buffer)
+        
         # Calculate total height needed for all messages including the new one
         total_height = self.margin  # Start with top margin
         for msg in self.active_messages:
-            total_height += self._calculate_message_height(msg)
+            total_height += self._calculate_message_height(msg, draw)
         
         # Add height of new message
-        new_msg_height = self._calculate_message_height(message)
+        new_msg_height = self._calculate_message_height(message, draw)
         
         # Remove oldest messages until new message would fit
         while self.active_messages and (total_height + new_msg_height > self.SCREEN_HEIGHT - self.margin):
@@ -285,21 +329,31 @@ class ScreenController:
             player_color = self.TEAM_PLAYER_COLOR if msg.is_team_chat else self.PLAYER_COLOR
             draw.text((x, y), player_text, font=self.font_bold, fill=player_color)
             
-            # Draw original message in white
+            # Calculate available width for text
             text_width = draw.textlength(player_text, font=self.font_bold)
-            draw.text((x + text_width + 5, y), msg.original, font=self.font, fill=self.ORIGINAL_COLOR)
-            
+            available_width = 480 - (self.margin * 2 + 5) - text_width - 5
+
+            # Draw original message with word wrap
+            original_lines = self._wrap_text(msg.original, available_width, draw, self.font)
+            for line in original_lines:
+                draw.text((x + text_width + 5, y), line, font=self.font, fill=self.ORIGINAL_COLOR)
+                y += self.LINE_HEIGHT
+
             # Only show translation if it's different from original
             if msg.original != msg.translated:
-                # Move to next line for translation
-                y += self.LINE_HEIGHT
+                # Calculate width for translated text (account for arrow)
+                translation_width = available_width - 30
+                translated_lines = self._wrap_text(msg.translated, translation_width, draw, self.font)
                 
                 # Draw arrow and translation
-                draw.text((x + 15, y), "→", font=self.font_bold, fill=self.ARROW_COLOR)
-                draw.text((x + 30, y), msg.translated, font=self.font, fill=self.TRANSLATED_COLOR)
+                for i, line in enumerate(translated_lines):
+                    if i == 0:
+                        draw.text((x + 15, y), "→", font=self.font_bold, fill=self.ARROW_COLOR)
+                    draw.text((x + 30, y), line, font=self.font, fill=self.TRANSLATED_COLOR)
+                    y += self.LINE_HEIGHT
             
-            # Move to next message
-            y += self.LINE_HEIGHT + self.MESSAGE_SPACING
+            # Add spacing between messages
+            y += self.MESSAGE_SPACING
             
         # Update screen with complete buffer
         self.screen.DisplayPILImage(self.display_buffer)

@@ -101,6 +101,7 @@ The `config.json` file contains all settings:
         "margin": 2,
         "spacing": 2
       }
+      // Messages are automatically word-wrapped to fit the screen width
     }
   }
 }
