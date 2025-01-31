@@ -265,7 +265,7 @@ class ScreenController:
         # Remove oldest messages until new message would fit
         while self.active_messages and (total_height + new_msg_height > self.SCREEN_HEIGHT - self.margin):
             removed_msg = self.active_messages.pop(0)
-            total_height -= self._calculate_message_height(removed_msg)
+            total_height -= self._calculate_message_height(removed_msg, draw)
             
         # Add new message only if it will fit
         if total_height + new_msg_height <= self.SCREEN_HEIGHT - self.margin:
