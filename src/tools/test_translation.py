@@ -207,11 +207,14 @@ class TestTranslationService(unittest.TestCase):
         )
         mock_post.return_value = mock_error_response
 
-        # Test various untranslatable content
-        test_cases = ["1+?", "123", ":-)", "!!!"]
+        # Test various untranslatable content that will trigger API calls
+        test_cases = ["1+?abc", "123xyz", ":-)hello", "!!!test"]  # Added text to pass initial length check
         for text in test_cases:
             result = self.service.translate(text)
             self.assertEqual(result, text, f"Untranslatable content '{text}' should return unchanged")
+            # Should only try once, not retry on undefined language error
+            self.assertEqual(mock_post.call_count, 1, f"Should not retry on undefined language error for '{text}'")
+            mock_post.reset_mock()  # Reset for next test case
 
 if __name__ == '__main__':
     unittest.main()

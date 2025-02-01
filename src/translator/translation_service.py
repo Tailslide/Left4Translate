@@ -37,6 +37,14 @@ class RateLimiter:
         logging.warning(f"Rate limiter: No tokens available. Current tokens: {self.tokens:.2f}")
         return False
 
+def is_undefined_language_error(e: requests.exceptions.HTTPError) -> bool:
+    """Check if the error is due to undefined language."""
+    try:
+        return (e.response.status_code == 400 and 
+                'Source language: und' in e.response.text)
+    except:
+        return False
+
 class TranslationService:
     """Handles translation of messages using Google Cloud Translation API."""
     
@@ -282,7 +290,7 @@ class TranslationService:
                             source_language = base_language  # Use base language code for translation
                         except requests.exceptions.HTTPError as e:
                             # If language detection fails with 400 error (undefined language)
-                            if e.response.status_code == 400 and 'Source language: und' in e.response.text:
+                            if is_undefined_language_error(e):
                                 logging.debug(f"Language detection failed, text may be untranslatable: '{text}'")
                                 return text
                             raise  # Re-raise other HTTP errors
@@ -339,13 +347,14 @@ class TranslationService:
                     return final_text
                     
                 except requests.exceptions.HTTPError as e:
+                    # If it's an undefined language error, return original text immediately
+                    if is_undefined_language_error(e):
+                        logging.debug(f"Translation failed due to undefined language, returning original: '{text}'")
+                        return text
+                        
                     attempts += 1
                     logging.error(f"HTTP Error on attempt {attempts}: {str(e)}")
                     if attempts >= self.retry_attempts:
-                        # If all retries failed and it's a language detection error, return original text
-                        if e.response.status_code == 400 and 'Source language: und' in e.response.text:
-                            logging.debug(f"Translation failed due to undefined language, returning original: '{text}'")
-                            return text
                         raise Exception(f"Translation failed after {attempts} attempts: {e}")
                     time.sleep(1)  # Wait before retry
                 except Exception as e:
