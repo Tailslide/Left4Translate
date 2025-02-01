@@ -194,5 +194,24 @@ class TestTranslationService(unittest.TestCase):
         result = self.service.translate("el manco esta aqui", source_language="es")
         self.assertEqual(result, "the noob is here")
 
+    @patch('requests.post')
+    def test_untranslatable_content(self, mock_post):
+        """Test handling of untranslatable content (symbols, numbers, etc.)."""
+        # Mock language detection to fail with 400 error for undefined language
+        mock_error_response = Mock()
+        mock_error_response.status_code = 400
+        mock_error_response.text = '{"error":{"details":[{"fieldViolations":[{"field":"source","description":"Source language: und"}]}]}}'
+        mock_error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "400 Client Error: Bad Request",
+            response=mock_error_response
+        )
+        mock_post.return_value = mock_error_response
+
+        # Test various untranslatable content
+        test_cases = ["1+?", "123", ":-)", "!!!"]
+        for text in test_cases:
+            result = self.service.translate(text)
+            self.assertEqual(result, text, f"Untranslatable content '{text}' should return unchanged")
+
 if __name__ == '__main__':
     unittest.main()

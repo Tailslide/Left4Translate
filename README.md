@@ -14,7 +14,11 @@ Real-time chat translation for Left 4 Dead 2, displaying translated messages on 
 - Improved chat message detection with UTF-8 encoding support and error handling
 - Fixed handling of special characters in player names and messages
 - Enhanced system message filtering with prioritized prefix detection to properly handle system messages containing colons
-- Improved handling of non-translatable content (punctuation-only messages, emotes, etc.)
+- Improved handling of non-translatable content:
+  * Short messages and punctuation-only content
+  * Numbers and mathematical expressions (e.g., "1+?")
+  * Emoticons and special characters
+  * Messages with undefined language
 - Smart translation of gaming slang and casual expressions with extensive Spanish gaming dictionary and context-aware translations:
   * Game mechanics: "rushear" → "rush", "campear" → "camping", "farmear" → "farming"
   * Special infected: "bruja" → "witch", "tanque" → "tank"
@@ -134,6 +138,7 @@ The test suite includes:
 - Screen display
 - Slang translation
 - Live translation tests
+- Handling of untranslatable content
 
 ### Testing Translations
 
