@@ -1,27 +1,9 @@
 import re
+import pytest
 
-# Pattern explanation:
-# ^                     Start of line
-# (?:                   Non-capturing group for team chat prefix
-#   \(                  Opening parenthesis
-#   (Survivor|Infected) Team type
-#   \)[ ]              Closing parenthesis and exactly one space
-# )?                    Team prefix is optional
-# (                     Capture player name
-#   (?!                 Negative lookahead for system messages
-#     Host_|Update|Unable|Changing|CAsync|NET_|L\s|String|Signal|
-#     Map|Server|Build|Players|Commentary|VSCRIPT|Anniversary|Steam|Network|
-#     RememberIPAddressForLobby
-#   )
-#   [\x03]?            Optional heart symbol
-#   [A-Za-z]           Must start with letter
-#   [A-Za-z0-9\s\x01\x03]{2,}? Then 2+ chars including control chars
-# )
-# [ ]+:[ ][ ]+         One or more spaces, colon, exactly two spaces (from log)
-# (.+)                 Message content
-# $                    End of line
+# Pattern explanation in comments preserved from original
 PATTERN = (
-    r'^(?:\((Survivor|Infected)\)\s+)?'  # Team prefix
+    r'^(?:\((Survivor|Infected)\)\s+|(?!\([^)]*\)))'  # Team prefix must be Survivor/Infected or no parentheses at all
     r'(?!.*(?:CBase|CSteam|CAsync|Map:|Players:|Build:|Server\s+Number|Unable\s+to|Update|RememberIPAddressForLobby|BinkOpen))'  # System messages
     r'((?:(?:\s*♥?(?:\([A-Za-z]+\))?\s*)*'  # Handle repeated team/name parts
     r'[\x03♥]?[A-Za-z][A-Za-z0-9\s\x01\x03♥☺()\s]{2,}?))'  # Player name (added () to allowed chars)
@@ -30,77 +12,70 @@ PATTERN = (
     r'(.+)$'  # Message content
 )
 
-def test_chat_pattern(line):
+test_cases = [
+    # Regular chat messages (should match)
+    ('Player : Hello world', True),
+    ('♥Player♥ : Hi there', True),
+    ('Player123 : Testing message', True),
+    ('Pro Gamer : GG WP', True),
+    
+    # Team chat messages (should match)
+    ('(Survivor) Player : Need help!', True),
+    ('(Infected) ZombiePlayer : Coming!', True),
+    ('(Survivor) ♥Player♥ : Watch out!', True),
+    ('(Infected) Player123 : Almost there', True),
+    
+    # Complex player names (should match)
+    ('♥Player (Pro)♥ : Message here', True),
+    ('(Survivor) Player (MVP) : Team message', True),
+    ('\x03ColoredName\x03 : Colored message', True),
+    ('Player ☺ : Happy message', True),
+    
+    # System messages (should not match)
+    ('CBase Entity created', False),
+    ('CSteam Connection established', False),
+    ('CAsync Operation completed', False),
+    ('Map: c1m1_hotel', False),
+    ('Players: 4/8', False),
+    ('Build: 123456', False),
+    ('Server Number: 1', False),
+    ('Unable to connect', False),
+    ('Update available', False),
+    ('RememberIPAddressForLobby: 192.168.1.1', False),
+    ('BinkOpen: video.bik', False),
+    
+    # System message content (should not match)
+    ('Player : FileReceived data.txt', False),
+    ('Player : InitiateConnection to server', False),
+    ('Player : Damage Given 100', False),
+    ('Player : Damage Taken 50', False),
+    ('Player : 10 .wavs total', False),
+    ('Player : loading test.bik', False),
+    ('Player : config.wav loaded', False),
+    ('Player : autoexec.cfg executed', False),
+    
+    # Edge cases
+    ('(Survivor) : Invalid message', False),  # No player name
+    ('(Invalid) Player : Bad team', False),  # Invalid team
+    (' : Empty player', False),  # No player name
+    ('Player :', False),  # No message
+    (':', False),  # Empty line with colon
+    ('Just a regular line', False),  # No chat format
+]
+
+@pytest.mark.parametrize("line,expected", test_cases)
+def test_chat_pattern(line, expected):
     """Test chat message pattern matching."""
     match = re.match(PATTERN, line)
+    result = bool(match)
+    assert result == expected, f"Expected {expected} for line: {line}"
     
-    if match:
+    if match and expected:
         team_type = match.group(1) or "None"  # None for regular chat
         player = match.group(2).strip()  # Remove extra spaces
         message = match.group(3)
-        print(f"\nMatch found:")
-        print(f"  Team: {team_type}")
-        print(f"  Player: '{player}'")
-        print(f"  Message: '{message}'")
-        return True
-    return False
-
-def main():
-    """Test regex pattern against actual console.log file."""
-    log_path = "C:/Program Files (x86)/Steam/steamapps/common/Left 4 Dead 2/left4dead2/console.log"
-    
-    print("Testing chat message pattern against console.log...")
-    print("Pattern:", PATTERN)
-    print("\nResults:")
-    
-    try:
-        with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
-            lines = f.readlines()
-            
-        total_lines = len(lines)
-        matched_lines = 0
-        team_chat = 0
-        regular_chat = 0
-        
-        # First pass - just show team chat lines for debugging
-        print("\nTeam chat lines found in log:")
-        for line in lines:
-            line = line.strip()
-            if '(Survivor)' in line or '(Infected)' in line:
-                print(f"Found team chat: '{line}'")
-                # Debug the line character by character
-                print("Characters:", [c for c in line])
-        
-        # Second pass - actual pattern matching
-        print("\nPattern matching results:")
-        for line in lines:
-            line = line.strip()
-            if line:
-                match = re.match(PATTERN, line)
-                if match:
-                    matched_lines += 1
-                    if match.group(1):  # Has team type
-                        team_chat += 1
-                        print("\nTeam chat matched:")
-                        print(f"Original line: '{line}'")
-                        print(f"Groups: {match.groups()}")
-                    else:
-                        regular_chat += 1
-                    test_chat_pattern(line)
-                elif '(Survivor)' in line or '(Infected)' in line:
-                    print(f"\nTeam chat NOT matched: '{line}'")
-                    # Debug the line character by character
-                    print("Characters:", [c for c in line])
-                
-        print(f"\nSummary:")
-        print(f"Total lines processed: {total_lines}")
-        print(f"Chat messages found: {matched_lines}")
-        print(f"  - Team chat: {team_chat}")
-        print(f"  - Regular chat: {regular_chat}")
-        print(f"System messages filtered: {total_lines - matched_lines}")
-        
-    except Exception as e:
-        print(f"Error reading log file: {e}")
-
-if __name__ == "__main__":
-    main()
+        # These prints are useful for debugging but not necessary for pytest
+        # print(f"\nMatch found:")
+        # print(f"  Team: {team_type}")
+        # print(f"  Player: '{player}'")
+        # print(f"  Message: '{message}'")

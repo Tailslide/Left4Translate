@@ -113,9 +113,31 @@ The `config.json` file contains all settings:
 2. Enable console logging: `con_logfile console.log`
 3. Run the translator: `python src/main.py`
 
-## Testing Translations
+## Testing
 
-To test the translation functionality:
+### Running the Test Suite
+
+To run the complete test suite:
+
+1. Activate the virtual environment:
+   ```bash
+   .\venv\Scripts\activate  # Windows
+   source venv/bin/activate # Linux/Mac
+   ```
+2. Install pytest: `pip install pytest`
+3. Run the tests: `python -m pytest src/tools/ -v`
+
+The test suite includes:
+- Chat message pattern matching
+- Translation service functionality
+- Configuration handling
+- Screen display
+- Slang translation
+- Live translation tests
+
+### Testing Translations
+
+To test the translation functionality specifically:
 
 1. Use the test script: `python src/tools/test_log_translation.py --read-once --from-start --log-path "path/to/console.log"`
 2. Options:

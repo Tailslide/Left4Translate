@@ -247,6 +247,11 @@ class TranslationService:
         # Clean the text first
         cleaned_text = self._clean_text(text)
         
+        # Skip translation for very short text or text containing only punctuation/special chars
+        if len(cleaned_text) <= 1 or not any(c.isalnum() for c in cleaned_text):
+            logging.debug(f"Skipping translation for short/non-text content: '{text}'")
+            return text
+            
         # Check cache first - strip script part from source language if present
         source_lang_base = source_language.split('-')[0] if source_language else 'auto'
         cache_key = f"{source_lang_base}:{cleaned_text}"
@@ -258,11 +263,6 @@ class TranslationService:
         while attempts < self.retry_attempts:
             if self.rate_limiter.acquire():
                 try:
-                    # Skip translation for very short text or text containing only punctuation/special chars
-                    if len(cleaned_text) <= 1 or not any(c.isalnum() for c in cleaned_text):
-                        logging.debug(f"Skipping translation for short/non-text content: '{text}'")
-                        return text
-                        
                     # Try to translate the entire phrase as slang first
                     slang_translated, was_slang = self._translate_slang(cleaned_text)
                     if was_slang:
