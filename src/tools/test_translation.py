@@ -200,21 +200,52 @@ class TestTranslationService(unittest.TestCase):
         # Mock language detection to fail with 400 error for undefined language
         mock_error_response = Mock()
         mock_error_response.status_code = 400
-        mock_error_response.text = '{"error":{"details":[{"fieldViolations":[{"field":"source","description":"Source language: und"}]}]}}'
+        mock_error_response.text = '{"error":{"code":400,"message":"Invalid Value","errors":[{"message":"Invalid Value","domain":"global","reason":"invalid"}],"details":[{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"source","description":"Source language: und"}]}]}}'
         mock_error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
             "400 Client Error: Bad Request",
             response=mock_error_response
         )
         mock_post.return_value = mock_error_response
 
-        # Test various untranslatable content that will trigger API calls
-        test_cases = ["1+?abc", "123xyz", ":-)hello", "!!!test"]  # Added text to pass initial length check
+        # Test various untranslatable content
+        test_cases = ["1+?", "123", ":-)", "!!!"]  # Exact test cases from production
         for text in test_cases:
             result = self.service.translate(text)
             self.assertEqual(result, text, f"Untranslatable content '{text}' should return unchanged")
-            # Should only try once, not retry on undefined language error
-            self.assertEqual(mock_post.call_count, 1, f"Should not retry on undefined language error for '{text}'")
-            mock_post.reset_mock()  # Reset for next test case
+            # Should skip translation entirely for these cases
+            self.assertEqual(mock_post.call_count, 0, f"Should not make API call for '{text}'")
+
+    @patch('requests.post')
+    def test_short_untranslatable_content(self, mock_post):
+        """Test handling of short untranslatable content that should be skipped entirely."""
+        # These cases should be caught by the initial length/content check
+        test_cases = ["1+?", "123", ":-)", "!!!"]
+        for text in test_cases:
+            result = self.service.translate(text)
+            self.assertEqual(result, text, f"Short untranslatable content '{text}' should return unchanged")
+            self.assertEqual(mock_post.call_count, 0, f"Should not make API call for '{text}'")
+
+    @patch('requests.post')
+    def test_undefined_language_error(self, mock_post):
+        """Test handling of undefined language error from the API."""
+        # Mock language detection to fail with 400 error for undefined language
+        mock_error_response = Mock()
+        mock_error_response.status_code = 400
+        mock_error_response.text = '{"error":{"code":400,"message":"Invalid Value","errors":[{"message":"Invalid Value","domain":"global","reason":"invalid"}],"details":[{"@type":"type.googleapis.com/google.rpc.BadRequest","fieldViolations":[{"field":"source","description":"Source language: und"}]}]}}'
+        mock_error_response.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            "400 Client Error: Bad Request",
+            response=mock_error_response
+        )
+        mock_post.return_value = mock_error_response
+
+        # Test content that will trigger API call but get undefined language error
+        test_cases = ["1+?abc", "123xyz", ":-)hello", "!!!test"]  # Added text to pass initial length check
+        for text in test_cases:
+            result = self.service.translate(text)
+            self.assertEqual(result, text, f"Content with undefined language '{text}' should return unchanged")
+            # Should try once but not retry
+            self.assertEqual(mock_post.call_count, 1, f"Should try API once for '{text}'")
+            mock_post.reset_mock()
 
 if __name__ == '__main__':
     unittest.main()

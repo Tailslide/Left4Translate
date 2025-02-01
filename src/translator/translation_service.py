@@ -45,6 +45,29 @@ def is_undefined_language_error(e: requests.exceptions.HTTPError) -> bool:
     except:
         return False
 
+def is_untranslatable_content(text: str) -> bool:
+    """Check if the content is likely untranslatable."""
+    # Check for very short text
+    if len(text) <= 3:  # Increased from 1 to catch more short content
+        return True
+        
+    # Check if text contains only special characters, numbers, and punctuation
+    if not any(c.isalpha() for c in text):
+        return True
+        
+    # Check for common untranslatable patterns
+    untranslatable_patterns = [
+        r'^\d+[\+\-\*\/\?]+\d*$',  # Math expressions like "1+?"
+        r'^[:\-\(\)]+$',  # Emoticons like ":-)"
+        r'^[!@#$%^&\*\(\)_\+\-=\[\]\{\};:\'",\.<>\/\?]+$'  # Only punctuation
+    ]
+    
+    for pattern in untranslatable_patterns:
+        if re.match(pattern, text):
+            return True
+            
+    return False
+
 class TranslationService:
     """Handles translation of messages using Google Cloud Translation API."""
     
@@ -253,9 +276,9 @@ class TranslationService:
         # Clean the text first
         cleaned_text = self._clean_text(text)
         
-        # Skip translation for very short text or text containing only punctuation/special chars
-        if len(cleaned_text) <= 1 or not any(c.isalnum() for c in cleaned_text):
-            logging.debug(f"Skipping translation for short/non-text content: '{text}'")
+        # Skip translation for untranslatable content
+        if is_untranslatable_content(cleaned_text):
+            logging.debug(f"Skipping translation for untranslatable content: '{text}'")
             return text
             
         # Check cache first - strip script part from source language if present
