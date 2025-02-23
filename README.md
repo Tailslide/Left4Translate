@@ -1,8 +1,8 @@
 # Left4Translate v1.0.0
 
 Real-time chat translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
-See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
-See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
+- See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
+- See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/Left4Translate)
 
