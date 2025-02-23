@@ -38,7 +38,11 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 - Python 3.8+
 - Left 4 Dead 2
 - Turing Smart Screen
-- Google Cloud Translation API key
+    See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
+    See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
+- Google Cloud Translation API key See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation
+    Note we are using Google Translate API V2 which has 500,000 free characters per month.
+    Also when you first sign up for Google Cloud API you get like $500 free credit for the first year.
 - Roboto Mono fonts (included in res/fonts/roboto-mono)
 
 ## Installation
@@ -46,7 +50,7 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 1. Clone this repository
 2. Install dependencies: `pip install -r requirements.txt`
 3. Copy `config/config.sample.json` to `config/config.json`
-4. Add your Google Cloud Translation API key to `config.json`
+4. Add your Google Cloud Translation API key to `config.json` 
 5. Configure your screen settings in `config.json`
 
 ### Building Executable
@@ -115,9 +119,15 @@ The `config.json` file contains all settings:
 
 ## Usage
 
-1. Start Left 4 Dead 2
-2. Enable console logging: `con_logfile console.log`
-3. Run the translator: `python src/main.py`
+1. Plug in your turing screen.
+2. Start Left 4 Dead 2
+3. Enable console logging: `con_logfile console.log`
+4. Optionally set this in steam launch options: `-condebug -conclearlog`
+5. Copy config.sample.json to config.json
+6. Update config.json log file path if it's not in default location.
+7. Update config.json with your turing screen com port number See: https://github.com/mathoudebine/turing-smart-screen-python
+8. Update config.json with your google translate API key. See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation
+9. Run the translator: `python src/main.py`
 
 ## Testing
 
