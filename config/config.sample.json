@@ -34,6 +34,36 @@
       }
     }
   },
+  "voice_translation": {
+    "enabled": true,
+    "trigger_button": {
+      "button": "button4",
+      "modifier_keys": []
+    },
+    "audio": {
+      "sample_rate": 16000,
+      "channels": 1,
+      "device": "default"
+    },
+    "speech_to_text": {
+      "language": "en-US",
+      "model": "default",
+      "credentials_path": "path/to/your-service-account-credentials.json"
+    },
+    "translation": {
+      "target_language": "es",
+      "show_original": true
+    },
+    "display": {
+      "show_original": true,
+      "show_translated": true,
+      "clear_after": 5000
+    },
+    "clipboard": {
+      "auto_copy": true,
+      "format": "translated"
+    }
+  },
   "logging": {
     "level": "info",
     "path": "logs/app.log",

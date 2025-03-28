@@ -1,13 +1,25 @@
-# Left4Translate v1.0.0
+# Left4Translate v1.2.1
 
-Real-time chat translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
+Real-time chat and voice translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/yourusername/Left4Translate)
+
+## Changelog
+
+### v1.2.1
+- Fixed voice translation error: Corrected parameter name mismatch in TranslationService.translate() call
+- Voice translation now correctly passes source_language instead of target_language parameter
+- Fixed target language configuration in voice translation manager to use the correct configuration section
+- Changed default clipboard format to only copy translated text instead of both original and translated
+
+### v1.2.0
+- Initial release with voice translation feature
 
 ## Features
 
+### Chat Translation
 - Real-time monitoring of L4D2 console log with initial processing of last 10 chat messages
 - Automatic translation of chat messages to English in real-time
 - Support for both regular and team chat messages
@@ -27,31 +39,74 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
   * Unique Spanish gaming slang and expressions that wouldn't be properly translated by Google Translate:
     * Gaming terms: "manco" → "noob", "puntaje" → "score", "reconectar" → "reconnecting"
     * Reactions: "ostia tio" → "holy crap dude", "a huevo" → "hell yeah", "no mames" → "no way", "si" → "yeah" (only as standalone or in "eso si")
+
+### Voice Translation (New!)
+- Record speech by holding down a mouse button (default: forward button, configured as "button4")
+- Transcribe speech to text using Google Cloud Speech-to-Text
+- Translate transcribed text to the target language (default: Spanish)
+- Display both original and translated text on the Turing Smart Screen
+- Automatically copy translated text to clipboard for easy pasting
+- Configurable settings for audio recording, transcription, translation, and display
+- Works as a standalone feature or alongside chat translation
+- Enhanced microphone volume diagnostics:
+  * Automatic volume level detection during initialization and recording
+  * Detailed feedback on audio levels with dB measurements
+  * Suggestions for alternative microphones when volume is too low
+  * Customized error messages based on audio quality
+- Visual error feedback for transcription issues with specific guidance
+
+### General Features
 - Display of translated messages on a Turing Smart Screen
 - Message caching to reduce API calls
 - Rate limiting to prevent API overuse
 - Configurable display settings
-- Extensive logging for troubleshooting
+- Extensive logging for troubleshooting with privacy-focused audio data handling
 
 ## Requirements
 
 - Python 3.8+
-- Left 4 Dead 2
+- Left 4 Dead 2 (for chat translation feature)
 - Turing Smart Screen
     See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
     See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
-- Google Cloud Translation API key See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation
-    Note we are using Google Translate API V2 which has 500,000 free characters per month.
-    Also when you first sign up for Google Cloud API you get like $500 free credit for the first year.
+- Google Cloud Authentication:
+    - Translation API key for chat and voice translation
+    - Speech-to-Text service account credentials for voice transcription (can use the same project)
+    - See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation for Translation API
+    - See: https://cloud.google.com/speech-to-text/docs/quickstart-client-libraries for Speech-to-Text service account setup
+    - Note we are using Google Translate API V2 which has 500,000 free characters per month.
+    - Speech-to-Text API offers 60 minutes of free transcription per month.
+    - Also when you first sign up for Google Cloud API you get like $500 free credit for the first year.
+- Working microphone (for voice translation feature)
 - Roboto Mono fonts (included in res/fonts/roboto-mono)
+
+### Important Note About Speech-to-Text Authentication
+
+Google Cloud Speech-to-Text API requires proper authentication using a service account with appropriate IAM permissions. Unlike the Translation API which can work with just an API key, Speech-to-Text requires a service account JSON credentials file.
+
+To set up authentication for Speech-to-Text:
+
+1. Go to the Google Cloud Console > IAM & Admin > Service Accounts
+2. Create a new service account with the "Cloud Speech Client" role
+3. Create a key for this service account (JSON format)
+4. Save the JSON file to a secure location on your computer
+5. Add the path to this file in the `voice_translation.speech_to_text.credentials_path` setting in `config.json`
+
+Without proper service account credentials, the voice translation feature will not work correctly.
 
 ## Installation
 
 1. Clone this repository
 2. Install dependencies: `pip install -r requirements.txt`
 3. Copy `config/config.sample.json` to `config/config.json`
-4. Add your Google Cloud Translation API key to `config.json` 
-5. Configure your screen settings in `config.json`
+4. Add your Google Cloud Translation API key to `config.json`
+5. For voice translation, create a service account and download the JSON credentials file:
+   - Go to the Google Cloud Console > IAM & Admin > Service Accounts
+   - Create a new service account with the "Cloud Speech Client" role
+   - Create a key for this service account (JSON format)
+   - Save the JSON file to a secure location
+   - Add the path to this file in the `voice_translation.speech_to_text.credentials_path` setting in `config.json`
+6. Configure your screen settings in `config.json`
 
 ### Building Executable
 
@@ -68,6 +123,7 @@ To create a standalone executable:
 4. Create your configuration:
    - Copy `config.sample.json` from the dist directory to `config.json`
    - Add your Google Cloud Translation API key to `config.json`
+   - For voice translation, add the path to your service account credentials file in `config.json`
    - Configure your screen settings in `config.json`
 
 The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build. Note that you must create your own config.json with your API key - this is not included in the build for security reasons.
@@ -113,21 +169,68 @@ The `config.json` file contains all settings:
       }
       // Messages are automatically word-wrapped to fit the screen width
     }
+  },
+  "voice_translation": {
+    "enabled": true,
+    "trigger_button": {
+      "button": "button4",
+      "modifier_keys": []
+    },
+    "audio": {
+      "sample_rate": 16000,
+      "channels": 1,
+      "device": "default"
+    },
+    "speech_to_text": {
+      "language": "en-US",
+      "model": "default",
+      "credentials_path": "path/to/your-service-account-credentials.json"
+    },
+    "translation": {
+      "target_language": "es",
+      "show_original": true
+    },
+    "display": {
+      "show_original": true,
+      "show_translated": true,
+      "clear_after": 5000
+    },
+    "clipboard": {
+      "auto_copy": true,
+      "format": "translated"
+    }
   }
 }
 ```
 
+For detailed information about voice translation configuration options, see [Voice Translation Documentation](docs/voice_translation.md).
+
 ## Usage
 
+### Basic Setup
+
 1. Plug in your turing screen.
-2. Start Left 4 Dead 2
-3. Enable console logging: `con_logfile console.log`
-4. Optionally set this in steam launch options: `-condebug -conclearlog`
-5. Copy config.sample.json to config.json
-6. Update config.json log file path if it's not in default location.
-7. Update config.json with your turing screen com port number See: https://github.com/mathoudebine/turing-smart-screen-python
-8. Update config.json with your google translate API key. See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation
-9. Run the translator: `python src/main.py`
+2. Copy config.sample.json to config.json
+3. Update config.json with your turing screen com port number See: https://github.com/mathoudebine/turing-smart-screen-python
+4. Update config.json with your Google Cloud API key. See: https://stackoverflow.com/questions/4854388/google-api-key-for-translation
+
+### For Chat Translation
+
+1. Start Left 4 Dead 2
+2. Enable console logging: `con_logfile console.log`
+3. Optionally set this in steam launch options: `-condebug -conclearlog`
+4. Update config.json log file path if it's not in default location.
+5. Run the translator in chat mode: `python src/main.py --mode chat`
+
+### For Voice Translation
+
+1. Ensure your microphone is properly connected and working
+2. Configure the voice translation settings in config.json
+3. Run the translator in voice mode: `python src/main.py --mode voice`
+
+### For Both Features
+
+Run the translator with both features enabled: `python src/main.py --mode both` (or simply `python src/main.py` as 'both' is the default)
 
 ## Testing
 
@@ -143,18 +246,24 @@ To run the complete test suite:
 2. Install pytest: `pip install pytest`
 3. Run the tests: `python -m pytest src/tools/ -v`
 
+For running all tests in the project, use:
+```bash
+python -m pytest --ignore=turing-smart-screen-python
+```
+(The `--ignore` flag is needed to skip tests in the external turing-smart-screen-python dependency that require additional dependencies)
+
 The test suite includes:
 - Chat message pattern matching
 - Translation service functionality
 - Configuration handling
-- Screen display
+- Screen display (skipped when run with pytest as it requires hardware)
 - Slang translation
 - Live translation tests
 - Handling of untranslatable content
 
-### Testing Translations
+### Testing Chat Translations
 
-To test the translation functionality specifically:
+To test the chat translation functionality specifically:
 
 1. Use the test script: `python src/tools/test_log_translation.py --read-once --from-start --log-path "path/to/console.log"`
 2. Options:
@@ -180,6 +289,46 @@ The test script helps verify:
 - Special character handling
 - Translation API connectivity
 - Context-aware translations
+
+### Testing Voice Translations
+
+To test the voice translation functionality:
+
+1. Use the test script: `python src/tools/test_translation.py --mode voice --text "Hello, this is a test" --target-lang es`
+2. Options:
+   - `--mode`: Translation mode (voice or text)
+   - `--text`: Text to translate
+   - `--target-lang`: Target language code (default: es)
+   - `--source-lang`: Source language code (default: auto-detect)
+
+Example voice translation test:
+```
+Original: Hello, this is a test
+Detected language: en
+Translated (es): Hola, esto es una prueba
+```
+
+This test script helps verify:
+- Speech-to-text configuration
+- Translation API connectivity
+- Language detection
+- Voice translation pipeline
+
+Note: The `test_translation.py` script is designed to be run as a standalone script with command-line arguments, not as a pytest test. When run with pytest, these tests are automatically skipped.
+
+### Testing Screen Display
+
+To test the Turing Smart Screen display:
+
+1. Use the test script: `python src/tools/test_screen.py`
+
+This script will:
+- List available COM ports
+- Connect to the screen on the configured port (default: COM8)
+- Display test messages with various formatting
+- Test word wrapping and special character handling
+
+Note: The `test_screen.py` script is designed to be run as a standalone script and requires physical hardware (Turing Smart Screen). When run with pytest, this test is automatically skipped.
 
 ## Message Format Support
 

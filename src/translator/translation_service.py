@@ -261,7 +261,8 @@ class TranslationService:
     def translate(
         self,
         text: str,
-        source_language: Optional[str] = None
+        source_language: Optional[str] = None,
+        target_language: Optional[str] = None
     ) -> str:
         """
         Translate text to target language.
@@ -269,10 +270,13 @@ class TranslationService:
         Args:
             text: Text to translate
             source_language: Source language code (optional)
+            target_language: Target language code (optional, defaults to self.target_language)
             
         Returns:
             Translated text
         """
+        # Use provided target language or fall back to the default
+        target_lang = target_language or self.target_language
         # Clean the text first
         cleaned_text = self._clean_text(text)
         
@@ -283,7 +287,7 @@ class TranslationService:
             
         # Check cache first - strip script part from source language if present
         source_lang_base = source_language.split('-')[0] if source_language else 'auto'
-        cache_key = f"{source_lang_base}:{cleaned_text}"
+        cache_key = f"{source_lang_base}:{target_lang}:{cleaned_text}"
         if cache_key in self.cache:
             return self.cache[cache_key]
             
@@ -306,7 +310,7 @@ class TranslationService:
                             base_language = detected.split('-')[0]
                             
                             # Skip translation if already in target language or undefined
-                            if base_language == self.target_language or base_language == 'und':
+                            if base_language == target_lang or base_language == 'und':
                                 logging.debug(f"Skipping translation for language: {detected}")
                                 return text  # Return original text, not cleaned
                             
@@ -321,7 +325,7 @@ class TranslationService:
                     # Perform translation
                     data = {
                         'q': cleaned_text,
-                        'target': self.target_language
+                        'target': target_lang
                     }
                     if source_language:
                         # Strip script part from source language if present

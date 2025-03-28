@@ -5,8 +5,9 @@ from pathlib import Path
 import os
 import time
 import re
+import argparse
 
-__version__ = "1.0.0"  # Current version number
+__version__ = "1.2.1"  # Updated version with voice translation bug fixes
 
 def get_executable_dir():
     """Get the directory containing the executable or script."""
@@ -44,12 +45,19 @@ def setup_logging(config_path: str):
 # Set up logging before importing other modules
 exe_dir = get_executable_dir()
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Left4Translate - Real-time chat translation for Left 4 Dead 2')
+parser.add_argument('--config', help='Path to config file')
+parser.add_argument('--mode', choices=['chat', 'voice', 'both'], default='both',
+                    help='Operating mode: chat, voice, or both (default: both)')
+args = parser.parse_args()
+
 # Try to find config in this order:
 # 1. Command line argument
 # 2. config.json in executable directory
 # 3. Default config directory
-if len(sys.argv) > 1:
-    config_path = sys.argv[1]
+if args.config:
+    config_path = args.config
 elif os.path.exists(os.path.join(exe_dir, "config.json")):
     config_path = os.path.join(exe_dir, "config.json")
 else:
@@ -61,6 +69,7 @@ from config.config_manager import ConfigManager
 from reader.message_reader import GameMessageReader, Message
 from translator.translation_service import TranslationService
 from display.screen_controller import ScreenController
+from audio.voice_translation_manager import VoiceTranslationManager
 
 def setup_app_logging(config_manager):
     """Set up application-specific logging."""
@@ -69,8 +78,9 @@ def setup_app_logging(config_manager):
 class Left4Translate:
     """Main application class."""
     
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, mode: str = 'both'):
         self.running = False
+        self.mode = mode
         
         try:
             # Load configuration
@@ -132,12 +142,29 @@ class Left4Translate:
                 spacing=screen_config.display.get("layout", {}).get("spacing", 2)
             )
             
-            # Initialize message reader
-            self.reader = GameMessageReader(
-                log_path=game_config.log_path,
-                message_pattern=game_config.message_format["regex"],
-                callback=self._handle_message
-            )
+            # Initialize chat message reader if mode is 'chat' or 'both'
+            if self.mode in ['chat', 'both']:
+                self.reader = GameMessageReader(
+                    log_path=game_config.log_path,
+                    message_pattern=game_config.message_format["regex"],
+                    callback=self._handle_message
+                )
+            else:
+                self.reader = None
+                
+            # Initialize voice translation manager if mode is 'voice' or 'both'
+            if self.mode in ['voice', 'both']:
+                # Get the full config dictionary
+                config_dict = self.config_manager.get_config()
+                
+                # Initialize voice translation manager
+                self.voice_manager = VoiceTranslationManager(
+                    config=config_dict,
+                    translation_service=self.translator,
+                    screen_controller=self.screen
+                )
+            else:
+                self.voice_manager = None
             
         except Exception as e:
             self.logger.error(f"Failed to initialize components: {e}")
@@ -245,11 +272,25 @@ class Left4Translate:
                 
             self.logger.info("Successfully connected to screen")
             
-            # Start monitoring game log, showing last 10 lines on startup
-            self.reader.start_monitoring(from_start=True)
-            self.logger.info("Started monitoring game log (showing last 10 lines)")
+            # Start chat message monitoring if enabled
+            if self.reader and self.mode in ['chat', 'both']:
+                self.reader.start_monitoring(from_start=True)
+                self.logger.info("Started monitoring game log (showing last 10 lines)")
+                
+            # Start voice translation if enabled
+            if self.voice_manager and self.mode in ['voice', 'both']:
+                if self.voice_manager.start():
+                    self.logger.info("Started voice translation mode")
+                else:
+                    self.logger.error("Failed to start voice translation mode")
             
-            self.logger.info("Left4Translate is running. Press Ctrl+C to stop.")
+            # Log the active modes
+            if self.mode == 'both':
+                self.logger.info("Left4Translate is running in chat and voice translation modes. Press Ctrl+C to stop.")
+            elif self.mode == 'chat':
+                self.logger.info("Left4Translate is running in chat translation mode only. Press Ctrl+C to stop.")
+            elif self.mode == 'voice':
+                self.logger.info("Left4Translate is running in voice translation mode only. Press Ctrl+C to stop.")
             
             # Keep the main thread alive
             while self.running:
@@ -266,7 +307,12 @@ class Left4Translate:
             self.running = False
             
             # Stop components
-            self.reader.stop_monitoring()
+            if self.reader:
+                self.reader.stop_monitoring()
+                
+            if self.voice_manager:
+                self.voice_manager.stop()
+                
             self.screen.disconnect()
             
             self.logger.info("Left4Translate stopped")
@@ -279,7 +325,7 @@ class Left4Translate:
 def main():
     """Application entry point."""
     # Config path is already set up at module level
-    app = Left4Translate(config_path)
+    app = Left4Translate(config_path, args.mode)
     app.start()
 
 if __name__ == "__main__":

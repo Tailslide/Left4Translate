@@ -233,13 +233,26 @@ class ScreenController:
         player: str,
         original: str,
         translated: str,
-        is_team_chat: bool = False
+        is_team_chat: bool = False,
+        timeout: Optional[int] = None
     ):
-        """Add a new message to the display queue."""
+        """
+        Add a new message to the display queue.
+        
+        Args:
+            player: Player name or message source
+            original: Original message text
+            translated: Translated message text
+            is_team_chat: Whether this is a team chat message
+            timeout: Custom timeout in milliseconds (overrides default message_timeout)
+        """
         now = datetime.now()
         
         # Clean up player name
         player = self._clean_player_name(player)
+        
+        # Use custom timeout if provided, otherwise use default
+        message_timeout = timeout if timeout is not None else self.message_timeout
         
         message = DisplayMessage(
             timestamp=now,
@@ -247,7 +260,7 @@ class ScreenController:
             original=original,
             translated=translated,
             is_team_chat=is_team_chat,
-            expiry=datetime.fromtimestamp(now.timestamp() + self.message_timeout / 1000) if self.message_timeout > 0 else None
+            expiry=datetime.fromtimestamp(now.timestamp() + message_timeout / 1000) if message_timeout > 0 else None
         )
         
         # Create temporary draw context for height calculations

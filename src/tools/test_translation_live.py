@@ -83,7 +83,7 @@ class TestTranslationServiceLive(unittest.TestCase):
         self.assertEqual(result1, result2)
         
         # Verify it's in cache
-        cache_key = f"es:{text}"
+        cache_key = f"es:en:{text}"
         self.assertIn(cache_key, self.service.cache)
 
 if __name__ == '__main__':

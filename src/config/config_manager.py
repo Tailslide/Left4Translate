@@ -158,3 +158,7 @@ class ConfigManager:
                 return default
                 
         return value if value is not None else default
+        
+    def get_config(self) -> Dict[str, Any]:
+        """Get the entire configuration dictionary."""
+        return self.config
