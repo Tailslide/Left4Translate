@@ -1,12 +1,18 @@
-# Left4Translate v1.2.1
+# Left4Translate v1.2.2
 
 Real-time chat and voice translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.2.1-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.2-blue.svg)](https://github.com/yourusername/Left4Translate)
 
 ## Changelog
+
+### v1.2.2
+- Fixed issue where chat messages weren't showing on the Turing screen at startup
+- Added "Registered" to system message prefixes to properly filter out system messages
+- Fixed message processing to correctly handle both team chat and regular chat formats
+- Improved message filtering to ensure only actual chat messages are displayed
 
 ### v1.2.1
 - Fixed voice translation error: Corrected parameter name mismatch in TranslationService.translate() call

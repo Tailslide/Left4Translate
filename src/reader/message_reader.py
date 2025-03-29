@@ -32,7 +32,8 @@ class GameLogHandler(FileSystemEventHandler):
         'Connecting', 'Receiving', 'Dropped', 'Redownloading', 'SignalXWriteOpportunity',
         'String Table', 'VAC', 'NextBot', 'prop_door_rotating', 'Duplicate sequence', 'Opened',
         'Server using', 'CSteam3', 'No pure server', 'Left 4 Dead', 'Initiating', 'SCRIPT',
-        'CSpeechScriptBridge', 'HSCRIPT', 'Director', 'Couldn\'t', 'prop_', 'S_StartSound'
+        'CSpeechScriptBridge', 'HSCRIPT', 'Director', 'Couldn\'t', 'prop_', 'S_StartSound',
+        'Registered'  # Added to filter out "Registered" system messages
     }
     
     def __init__(
@@ -154,23 +155,30 @@ class GameLogHandler(FileSystemEventHandler):
                 self.logger.debug(f"Match groups: {match.groups()}")
                 
                 groups = match.groups()
-                if len(groups) >= 3:  # We expect at least 3 groups (team, player, message)
+                
+                # Handle both team chat and regular chat formats
+                if groups[0] is not None:  # Team chat format
                     team_type = groups[0]  # First group is team type (Survivor/Infected)
                     player_name = groups[1]  # Second group is player name
                     message_content = groups[2]  # Third group is message content
-                    
-                    # Create message object with cleaned components
-                    message = Message(
-                        line=line,
-                        team=self._clean_text(team_type) if team_type else None,
-                        player=self._clean_text(player_name),
-                        content=self._clean_text(message_content)
-                    )
-                    
-                    if message.player:  # Only send if we got a player name
-                        self.callback(message)
+                elif groups[3] is not None:  # Regular chat format
+                    team_type = None
+                    player_name = groups[3]  # Fourth group is player name
+                    message_content = groups[4]  # Fifth group is message content
                 else:
-                    self.logger.debug(f"Not enough groups in match: {len(groups)}")
+                    self.logger.debug(f"Unexpected match groups: {groups}")
+                    return
+                
+                # Create message object with cleaned components
+                message = Message(
+                    line=line,
+                    team=self._clean_text(team_type) if team_type else None,
+                    player=self._clean_text(player_name),
+                    content=self._clean_text(message_content)
+                )
+                
+                if message.player:  # Only send if we got a player name
+                    self.callback(message)
             else:
                 self.logger.debug(f"Line did not match pattern: '{line}'")
                 
