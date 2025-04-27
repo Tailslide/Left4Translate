@@ -423,6 +423,11 @@ class TranslationService:
             logging.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
             logging.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
 
+            # Apply rate limiting before making the API call
+            while not self.rate_limiter.acquire():
+                logging.warning("Rate limit hit during language detection, waiting...")
+                time.sleep(0.1) # Wait briefly for token replenishment
+
             response = requests.post(
                 f"{self.base_url}/detect",  # This is a different endpoint for detection
                 params={'key': self.api_key},

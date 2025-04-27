@@ -121,7 +121,7 @@ class GameLogHandler(FileSystemEventHandler):
                 
         return True  # Default to treating unknown formats as system messages
             
-    def _clean_text(self, text: str | None) -> str | None:
+    def _clean_text(self, text: Optional[str]) -> Optional[str]:
         """Remove special characters from text."""
         if text is None:
             return None

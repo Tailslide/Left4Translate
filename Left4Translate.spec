@@ -45,8 +45,9 @@ a = Analysis(
         'google.api_core.grpc_helpers',
         'google.api_core.path_template',
         'google.api_core.page_iterator',
-        'google.api_core.operations_v1.operations_client'
-    ],
+        'google.api_core.operations_v1.operations_client',
+        'ctypes'  # Add ctypes explicitly
+],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

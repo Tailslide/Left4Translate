@@ -8,6 +8,9 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 
 ## Changelog
 
+### v1.2.3
+- Fixed potential API rate limit errors by adding rate limiting to language detection calls.
+
 ### v1.2.2
 - Fixed issue where chat messages weren't showing on the Turing screen at startup
 - Added "Registered" to system message prefixes to properly filter out system messages
@@ -70,7 +73,7 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - Left 4 Dead 2 (for chat translation feature)
 - Turing Smart Screen
     See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
@@ -133,6 +136,8 @@ To create a standalone executable:
    - Configure your screen settings in `config.json`
 
 The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build. Note that you must create your own config.json with your API key - this is not included in the build for security reasons.
+| 
+| **Note on PyInstaller Build Issues:** If you encounter an `ImportError: DLL load failed while importing _ctypes` when running the built executable, you may need to explicitly add `'ctypes'` to the `hiddenimports` list within the `Left4Translate.spec` file and rebuild. This ensures PyInstaller bundles the necessary libraries used by dependencies like `pyserial`.
 
 ## Configuration
 
