@@ -56,7 +56,7 @@ praw==7.8.1
 prawcore==2.4.0
 prompt_toolkit==3.0.50
 proto-plus==1.25.0
-protobuf==5.29.3
+protobuf==5.29.5
 pure_eval==0.2.3
 puremagic==1.28
 pyasn1==0.6.1
