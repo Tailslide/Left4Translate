@@ -5,7 +5,7 @@ auto-py-to-exe==2.45.1
 beautifulsoup4==4.12.3
 bottle==0.13.2
 bottle-websocket==0.2.9
-Brotli==1.1.0
+Brotli==1.2.0
 cachetools==5.5.1
 certifi==2024.12.14
 cffi==1.17.1
