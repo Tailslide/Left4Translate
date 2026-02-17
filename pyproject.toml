@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "left4translate"
-version = "1.2.5"
+version = "1.2.6"
 description = "Real-time chat translation for Left 4 Dead 2"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT"}
 
 [tool.bumpversion]
-current_version = "1.2.5"
+current_version = "1.2.6"
 commit = false
 tag = false
 message = "Bump version: {current_version} → {new_version} [skip ci]"

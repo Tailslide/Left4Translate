@@ -7,7 +7,7 @@ import time
 import re
 import argparse
 
-__version__ = "1.2.5"  # Updated version with chat message display fix
+__version__ = "1.2.6"  # Updated version with chat message display fix
 
 def get_executable_dir():
     """Get the directory containing the executable or script."""
@@ -330,3 +330,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+#test auto version bump    
