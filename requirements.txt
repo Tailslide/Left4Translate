@@ -5,7 +5,7 @@ auto-py-to-exe==2.45.1
 beautifulsoup4==4.12.3
 bottle==0.13.2
 bottle-websocket==0.2.9
-Brotli==1.1.0
+Brotli==1.2.0
 cachetools==5.5.1
 certifi==2024.12.14
 cffi==1.17.1
@@ -56,10 +56,10 @@ praw==7.8.1
 prawcore==2.4.0
 prompt_toolkit==3.0.50
 proto-plus==1.25.0
-protobuf==5.29.3
+protobuf==5.29.6
 pure_eval==0.2.3
 puremagic==1.28
-pyasn1==0.6.1
+pyasn1==0.6.2
 pyasn1_modules==0.4.1
 pycparser==2.22
 pycryptodomex==3.21.0
@@ -80,7 +80,7 @@ python-i18n==0.3.9
 python-mpv-jsonipc==1.2.0
 pywin32-ctypes==0.2.3
 regex==2024.11.6
-requests==2.32.3
+requests==2.32.4
 rich==13.9.4
 rsa==4.9
 scipy==1.13.1
@@ -99,7 +99,7 @@ tomli==2.2.1
 traitlets==5.14.3
 typing_extensions==4.12.2
 update-checker==0.18.0
-urllib3==2.3.0
+urllib3==2.6.3
 watchdog==6.0.0
 wcwidth==0.2.13
 websocket-client==1.8.0
