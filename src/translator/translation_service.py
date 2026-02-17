@@ -40,9 +40,9 @@ class RateLimiter:
 def is_undefined_language_error(e: requests.exceptions.HTTPError) -> bool:
     """Check if the error is due to undefined language."""
     try:
-        return (e.response.status_code == 400 and 
+        return (e.response.status_code == 400 and
                 'Source language: und' in e.response.text)
-    except:
+    except Exception:
         return False
 
 def is_untranslatable_content(text: str) -> bool:
@@ -67,6 +67,95 @@ def is_untranslatable_content(text: str) -> bool:
             return True
             
     return False
+
+# Spanish gaming/internet slang dictionary as a class constant
+SPANISH_SLANG_DICT = {
+    # Gaming performance/status
+    'bistec': 'buff',  # Gaming slang for strong/muscular
+    'op': 'overpowered',
+    'nerfear': 'nerf',
+    'rushear': 'rush',
+    'ptm': 'damn',  # Spanish gaming slang expletive
+    'campear': 'camping',
+    'farmear': 'farming',
+    'lootear': 'looting',
+    'spawnear': 'spawning',
+    'lagger': 'lagging',
+    'lagueado': 'lagging',
+    'bugeado': 'bugged',
+    'rip': 'dead',
+    'f': 'rip',
+
+    # Common reactions and affirmations
+    'si': 'yeah',
+    'eso si': 'yeah',  # Common affirmation
+    'ostia tio': 'holy crap dude',
+    'tio': 'bro',
+    'broca': 'bro',  # Mexican slang
+    'brocoli': 'bro',  # Playful variant of broca
+    'brocha': 'bro',  # Another variant
+    'vale': 'ok',
+    
+    'joder': 'damn',
+    'vamos': "let's go",
+    'que pasa': "what's up",
+    'no mames': 'no way',
+    'pinche': 'freaking',
+    'wey': 'dude',
+    'güey': 'dude',  # Proper spelling of wey
+    'chido': 'cool',
+    'a huevo': 'hell yeah',
+    'no manche': 'no way',
+    'nel': 'nope',
+    'simon': 'yeah',
+    'neta': 'really',
+    'que onda': "what's up",
+    'equis': "whatever",
+    'x': "whatever",
+    'va': 'ok',  # Short form of vale
+    'sale': 'ok',  # Mexican slang for agreement
+    'sobres': 'alright',  # Mexican slang for agreement
+    'fierro': "let's go",  # Northern Mexican slang for enthusiasm
+
+    # Team communication
+    'izi': 'ez',  # Common Spanish variant of 'ez'
+    
+    # Base forms
+    'rico': 'nice',
+    'delicioso': 'delicious',
+    'deli': 'nice',
+    
+    # Extended forms with emphasis
+    'ricooo': 'niceee',
+    'ricxoooooo': 'niceeee',
+    'ricoo+': 'nicee+',
+    
+    # With que/q prefix
+    'q rico': 'so nice',
+    'que rico': 'so nice',
+    'q ricxoooooo': 'so niceeee',
+    
+    # Add to Spanish indicators
+    'ricx': 'nice',
+    'ricoo': 'nice',
+    'ricxo': 'nice',
+    'q ric': 'so nice',
+    'que ric': 'so nice',
+    'q ricx': 'so nice',
+    'que ricx': 'so nice',
+    'ayuda': 'help',
+    'cuidado': 'watch out',
+    'atras': 'behind',
+    'vienen': 'incoming',
+    'tanque': 'tank',
+    'bruja': 'witch',
+    
+    # Only unique Spanish gaming slang and expressions that differ from English
+    'manco': 'noob',
+    'puntaje': 'score',
+    'reconectar': 'reconnecting',
+}
+
 
 class TranslationService:
     """Handles translation of messages using Google Cloud Translation API."""
@@ -97,97 +186,11 @@ class TranslationService:
         return cleaned
 
     def _get_slang_translations(self) -> dict:
-        """Get dictionary of Spanish gaming/internet slang translations."""
-        return {
-            # Gaming performance/status
-            'bistec': 'buff',  # Gaming slang for strong/muscular
-            'op': 'overpowered',
-            'nerfear': 'nerf',
-            'rushear': 'rush',
-            'ptm': 'damn',  # Spanish gaming slang expletive
-            'campear': 'camping',
-            'farmear': 'farming',
-            'lootear': 'looting',
-            'spawnear': 'spawning',
-            'lagger': 'lagging',
-            'lagueado': 'lagging',
-            'bugeado': 'bugged',
-            'rip': 'dead',
-            'f': 'rip',
-
-            # Common reactions and affirmations
-            'si': 'yeah',
-            'eso si': 'yeah',  # Common affirmation
-            'ostia tio': 'holy crap dude',
-            'tio': 'bro',
-            'broca': 'bro',  # Mexican slang
-            'brocoli': 'bro',  # Playful variant of broca
-            'brocha': 'bro',  # Another variant
-            'vale': 'ok',
-            
-            'joder': 'damn',
-            'vamos': "let's go",
-            'que pasa': "what's up",
-            'no mames': 'no way',
-            'pinche': 'freaking',
-            'wey': 'dude',
-            'güey': 'dude',  # Proper spelling of wey
-            'chido': 'cool',
-            'a huevo': 'hell yeah',
-            'no manches': 'no way',
-            'nel': 'nope',
-            'simon': 'yeah',
-            'neta': 'really',
-            'que onda': "what's up",
-            'equis': "whatever",
-            'x': "whatever",
-            'va': 'ok',  # Short form of vale
-            'sale': 'ok',  # Mexican slang for agreement
-            'sobres': 'alright',  # Mexican slang for agreement
-            'fierro': "let's go",  # Northern Mexican slang for enthusiasm
-
-            # Team communication
-            'izi': 'ez',  # Common Spanish variant of 'ez'
-            
-            # Base forms
-            'rico': 'nice',
-            'delicioso': 'delicious',
-            'deli': 'nice',
-            
-            # Extended forms with emphasis
-            'ricooo': 'niceee',
-            'ricxoooooo': 'niceeee',
-            'ricoo+': 'nicee+',
-            
-            # With que/q prefix
-            'q rico': 'so nice',
-            'que rico': 'so nice',
-            'q ricxoooooo': 'so niceeee',
-            
-            # Add to Spanish indicators
-            'ricx': 'nice',
-            'deli': 'nice',
-            'ricoo': 'nice',
-            'ricxo': 'nice',
-            'q ric': 'so nice',
-            'que ric': 'so nice',
-            'q ricx': 'so nice',
-            'que ricx': 'so nice',
-            'ayuda': 'help',
-            'cuidado': 'watch out',
-            'atras': 'behind',
-            'vienen': 'incoming',
-            'tanque': 'tank',
-            'bruja': 'witch',
-            
-            # Only unique Spanish gaming slang and expressions that differ from English
-            'manco': 'noob',
-            'puntaje': 'score',
-            'reconectar': 'reconnecting',
-            'ostia tio': 'holy crap dude',
-            'a huevo': 'hell yeah',
-            'no mames': 'no way'
-        }
+        """Get dictionary of Spanish gaming/internet slang translations.
+        
+        Returns the module-level SPANISH_SLANG_DICT constant.
+        """
+        return SPANISH_SLANG_DICT
 
     def _translate_slang(self, text: str) -> tuple[str, bool]:
         """

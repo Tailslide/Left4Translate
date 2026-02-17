@@ -2,11 +2,14 @@ from typing import List, Optional
 from datetime import datetime
 import time
 import re
+import logging
 from dataclasses import dataclass
-from queue import Queue
 import threading
 
 from .turing_display import TuringDisplay
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -75,8 +78,8 @@ class ScreenController:
             revision=revision
         )
         
-        # App-specific state
-        self.message_queue = Queue()
+        # App-specific state - use a lock for thread safety
+        self._active_messages_lock = threading.Lock()
         self.active_messages: List[DisplayMessage] = []
         self.running = False
         self.display_thread = None
@@ -132,7 +135,7 @@ class ScreenController:
             
             return True
         except Exception as e:
-            print(f"Failed to connect to screen: {e}")
+            logger.error(f"Failed to connect to screen: {e}")
             return False
             
     def disconnect(self):
@@ -212,22 +215,24 @@ class ScreenController:
             expiry=datetime.fromtimestamp(now.timestamp() + message_timeout / 1000) if message_timeout > 0 else None
         )
         
-        # Calculate total height needed for all messages including the new one
-        total_height = self.margin  # Start with top margin
-        for msg in self.active_messages:
-            total_height += self._calculate_message_height(msg)
-        
-        # Add height of new message
-        new_msg_height = self._calculate_message_height(message)
-        
-        # Remove oldest messages until new message would fit
-        while self.active_messages and (total_height + new_msg_height > self._screen_height - self.margin):
-            removed_msg = self.active_messages.pop(0)
-            total_height -= self._calculate_message_height(removed_msg)
+        # Thread-safe update of active_messages
+        with self._active_messages_lock:
+            # Calculate total height needed for all messages including the new one
+            total_height = self.margin  # Start with top margin
+            for msg in self.active_messages:
+                total_height += self._calculate_message_height(msg)
             
-        # Add new message only if it will fit
-        if total_height + new_msg_height <= self._screen_height - self.margin:
-            self.active_messages.append(message)
+            # Add height of new message
+            new_msg_height = self._calculate_message_height(message)
+            
+            # Remove oldest messages until new message would fit
+            while self.active_messages and (total_height + new_msg_height > self._screen_height - self.margin):
+                removed_msg = self.active_messages.pop(0)
+                total_height -= self._calculate_message_height(removed_msg)
+                
+            # Add new message only if it will fit
+            if total_height + new_msg_height <= self._screen_height - self.margin:
+                self.active_messages.append(message)
         
     def clear_display(self):
         """Clear all messages from the screen."""
@@ -236,9 +241,8 @@ class ScreenController:
             self.display.clear()
             self.display.render()
             
-        self.active_messages.clear()
-        while not self.message_queue.empty():
-            self.message_queue.get()
+        with self._active_messages_lock:
+            self.active_messages.clear()
             
     def set_brightness(self, level: int):
         """Set the screen brightness level (0-100)."""
@@ -251,7 +255,7 @@ class ScreenController:
                 self._update_display()
                 time.sleep(0.2)  # Reduced delay between updates
             except Exception as e:
-                print(f"Display error: {e}")
+                logger.error(f"Display error: {e}")
                 time.sleep(1)  # Wait before retry
                 
     def _update_display(self):
@@ -261,12 +265,16 @@ class ScreenController:
             
         now = datetime.now()
         
-        # Remove expired messages if timeout is enabled
-        if self.message_timeout > 0:
-            self.active_messages = [
-                msg for msg in self.active_messages
-                if msg.expiry and msg.expiry > now
-            ]
+        # Get a copy of messages under lock for thread safety
+        with self._active_messages_lock:
+            # Remove expired messages if timeout is enabled
+            if self.message_timeout > 0:
+                self.active_messages = [
+                    msg for msg in self.active_messages
+                    if msg.expiry and msg.expiry > now
+                ]
+            # Make a copy to avoid holding lock during rendering
+            messages_to_display = list(self.active_messages)
         
         # Clear buffer using display library
         self.display.clear()
@@ -278,7 +286,7 @@ class ScreenController:
         y = self.margin
         x = self.margin + 5  # Reduced margin
         
-        for msg in self.active_messages:
+        for msg in messages_to_display:
             # Draw player name in appropriate color
             player_text = f"[{msg.player}]"  # No extra spaces in brackets
             player_color = self.TEAM_PLAYER_COLOR if msg.is_team_chat else self.PLAYER_COLOR

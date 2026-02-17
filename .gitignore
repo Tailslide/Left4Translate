@@ -36,6 +36,7 @@ config/config.json
 config.json
 logs/
 *.log
+test_log.txt
 src/library/
 
 # Turing Smart Screen library

@@ -397,12 +397,15 @@ class VoiceTranslationManager:
         """
         return self.is_active
         
-    def _check_audio_quality(self, audio_data) -> None:
+    def _check_audio_quality(self, audio_data) -> str:
         """
         Check audio quality and log diagnostic information.
         
         Args:
             audio_data: Audio data to check
+            
+        Returns:
+            str: Quality level ("very_low", "low", "good", "acceptable", "error")
         """
         try:
             # Calculate RMS value to estimate audio level

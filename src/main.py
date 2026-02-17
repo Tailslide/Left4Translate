@@ -4,20 +4,26 @@ import logging
 from pathlib import Path
 import os
 import time
-import re
 import argparse
 
-__version__ = "1.2.6"  # Updated version with chat message display fix
+# Import all modules at top level (but only initialize logging when needed)
+from config.config_manager import ConfigManager
+from reader.message_reader import GameMessageReader, Message
+from translator.translation_service import TranslationService
+from display.screen_controller import ScreenController
+from audio.voice_translation_manager import VoiceTranslationManager
+
+__version__ = "1.2.7"  # Updated version with chat message display fix
+
 
 def get_executable_dir():
     """Get the directory containing the executable or script."""
     exe_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    print(f"Executable directory: {exe_dir}")
     return exe_dir
 
+
 def setup_logging(config_path: str):
-    print(f"Looking for config at: {config_path}")
-    """Set up logging configuration before importing other modules."""
+    """Set up logging configuration."""
     import json
     
     # Load logging config from config.json
@@ -29,9 +35,6 @@ def setup_logging(config_path: str):
     log_dir = Path(log_config.get("path", "logs/app.log")).parent
     log_dir.mkdir(parents=True, exist_ok=True)
     
-    # Force UTF-8 encoding for stdout
-    sys.stdout.reconfigure(encoding='utf-8')
-    
     # Set up root logger with UTF-8 encoding
     logging.basicConfig(
         level=getattr(logging, log_config.get("level", "INFO").upper()),
@@ -41,39 +44,40 @@ def setup_logging(config_path: str):
             logging.StreamHandler(sys.stdout)
         ]
     )
-
-# Set up logging before importing other modules
-exe_dir = get_executable_dir()
-
-# Parse command line arguments
-parser = argparse.ArgumentParser(description='Left4Translate - Real-time chat translation for Left 4 Dead 2')
-parser.add_argument('--config', help='Path to config file')
-parser.add_argument('--mode', choices=['chat', 'voice', 'both'], default='both',
-                    help='Operating mode: chat, voice, or both (default: both)')
-args = parser.parse_args()
-
-# Try to find config in this order:
-# 1. Command line argument
-# 2. config.json in executable directory
-# 3. Default config directory
-if args.config:
-    config_path = args.config
-elif os.path.exists(os.path.join(exe_dir, "config.json")):
-    config_path = os.path.join(exe_dir, "config.json")
-else:
-    config_path = os.path.join(exe_dir, "config", "config.json")
-
-setup_logging(config_path)
-
-from config.config_manager import ConfigManager
-from reader.message_reader import GameMessageReader, Message
-from translator.translation_service import TranslationService
-from display.screen_controller import ScreenController
-from audio.voice_translation_manager import VoiceTranslationManager
-
-def setup_app_logging(config_manager):
-    """Set up application-specific logging."""
+    
     return logging.getLogger(__name__)
+
+
+def resolve_config_path(args, exe_dir):
+    """Resolve config path from args or default locations."""
+    if args.config:
+        return args.config
+    elif os.path.exists(os.path.join(exe_dir, "config.json")):
+        return os.path.join(exe_dir, "config.json")
+    else:
+        return os.path.join(exe_dir, "config", "config.json")
+
+
+def main():
+    """Application entry point."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Left4Translate - Real-time chat translation for Left 4 Dead 2')
+    parser.add_argument('--config', help='Path to config file')
+    parser.add_argument('--mode', choices=['chat', 'voice', 'both'], default='both',
+                        help='Operating mode: chat, voice, or both (default: both)')
+    args = parser.parse_args()
+    
+    # Resolve config path before setting up logging
+    exe_dir = get_executable_dir()
+    config_path = resolve_config_path(args, exe_dir)
+    
+    # Set up logging first
+    logger = setup_logging(config_path)
+    
+    # Run the application
+    app = Left4Translate(config_path, args.mode)
+    app.start()
+
 
 class Left4Translate:
     """Main application class."""
@@ -88,7 +92,7 @@ class Left4Translate:
             self.config_manager.load_config()
             
             # Set up application logging
-            self.logger = setup_app_logging(self.config_manager)
+            self.logger = logging.getLogger(__name__)
             
             # Validate configuration
             errors = self.config_manager.validate_config()
@@ -165,7 +169,7 @@ class Left4Translate:
                 )
             else:
                 self.voice_manager = None
-            
+                
         except Exception as e:
             self.logger.error(f"Failed to initialize components: {e}")
             sys.exit(1)
@@ -173,52 +177,15 @@ class Left4Translate:
     def _handle_message(self, message: Message):
         """Handle new chat messages."""
         try:
-            # Parse the message using the configured regex
-            pattern = self.config_manager.get_game_config().message_format["regex"]
-            groups = self.config_manager.get_game_config().message_format["groups"]
+            # Use the already-parsed message fields from the Message dataclass
+            # The GameLogHandler already extracted player, content, and team
+            player_name = message.player
+            chat_message = message.content
+            team_type = message.team
             
-            # Debug log the incoming message
-            self.logger.debug(f"Processing message: '{message.line}'")
-            
-            match = re.match(pattern, message.line)
-            if not match:
-                self.logger.debug(f"Message did not match pattern: '{message.line}'")
-                return  # Not a chat message
-                
-            # Extract components using the configured group indices
-            team_type = match.group(groups["team"]) if "team" in groups else None
-            
-            # Handle comma-separated group indices for player and message
-            player_groups = [int(g) for g in str(groups["player"]).split(",")]
-            message_groups = [int(g) for g in str(groups["message"]).split(",")]
-            
-            # Try each group index until we find a non-None match
-            player_name = None
-            for group in player_groups:
-                try:
-                    value = match.group(group)
-                    if value is not None:
-                        player_name = value.strip()
-                        break
-                except IndexError:
-                    continue
-                    
-            chat_message = None
-            for group in message_groups:
-                try:
-                    value = match.group(group)
-                    if value is not None:
-                        chat_message = value
-                        break
-                except IndexError:
-                    continue
-                    
             if player_name is None or chat_message is None:
-                self.logger.debug("Failed to extract player name or message")
+                self.logger.debug("Message missing player name or content")
                 return
-            
-            # Debug log the parsed components
-            self.logger.debug(f"Parsed message - Team: {team_type}, Player: {player_name}, Message: {chat_message}")
             
             self.logger.info(f"New message from {player_name}: {chat_message}")
             
@@ -268,9 +235,8 @@ class Left4Translate:
             # Connect to screen
             if not self.screen.connect():
                 self.logger.error("Failed to connect to screen")
-                return
-                
-            self.logger.info("Successfully connected to screen")
+                # Graceful degradation: continue running without screen
+                self.logger.warning("Continuing without screen - translations will be logged but not displayed")
             
             # Start chat message monitoring if enabled
             if self.reader and self.mode in ['chat', 'both']:
@@ -302,9 +268,10 @@ class Left4Translate:
             
     def stop(self):
         """Stop the application."""
+        self.running = False
+        
         try:
             self.logger.info("Stopping Left4Translate...")
-            self.running = False
             
             # Stop components
             if self.reader:
@@ -316,20 +283,10 @@ class Left4Translate:
             self.screen.disconnect()
             
             self.logger.info("Left4Translate stopped")
-            sys.exit(0)
             
         except Exception as e:
             self.logger.error(f"Error stopping application: {e}")
-            sys.exit(1)
 
-def main():
-    """Application entry point."""
-    # Config path is already set up at module level
-    app = Left4Translate(config_path, args.mode)
-    app.start()
 
 if __name__ == "__main__":
     main()
-
-
-#test auto version bump    

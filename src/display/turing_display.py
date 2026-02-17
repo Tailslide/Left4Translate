@@ -21,10 +21,14 @@ Example usage:
 
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Optional, Tuple, List
 
 from PIL import Image, ImageDraw, ImageFont
+
+# Module-level logger
+logger = logging.getLogger(__name__)
 
 
 def get_resource_path(relative_path: str) -> str:
@@ -257,7 +261,7 @@ class TuringDisplay:
             return True
             
         except Exception as e:
-            print(f"Failed to connect to screen: {e}")
+            logger.error(f"Failed to connect to screen: {e}")
             self._is_connected = False
             return False
     
@@ -279,7 +283,7 @@ class TuringDisplay:
                 self._font = ImageFont.load_default()
                 self._font_bold = ImageFont.load_default()
         except Exception as e:
-            print(f"Failed to load fonts: {e}")
+            logger.error(f"Failed to load fonts: {e}")
             # Fallback to default
             self._font = ImageFont.load_default()
             self._font_bold = ImageFont.load_default()
@@ -541,7 +545,7 @@ class TuringDisplay:
             font = ImageFont.truetype(path, size)
             return font
         except Exception as e:
-            print(f"Failed to load font from {path}: {e}")
+            logger.error(f"Failed to load font from {path}: {e}")
             # Return default font as fallback
             return self._font if self._font else ImageFont.load_default()
     
