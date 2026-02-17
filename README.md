@@ -73,7 +73,8 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.10 - 3.13 (Recommended: 3.11)
+  - Note: Python 3.14+ is not yet fully supported as many dependencies do not have pre-built wheels, requiring a C++ compiler and Rust toolchain to build from source.
 - Left 4 Dead 2 (for chat translation feature)
 - Turing Smart Screen
     See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
@@ -123,7 +124,7 @@ To create a standalone executable:
 
 1. Create and activate a virtual environment (recommended):
    ```bash
-   python -m venv venv
+   py -3.12 -m venv venv
    .\venv\Scripts\activate  # Windows
    source venv/bin/activate # Linux/Mac
    ```
@@ -136,8 +137,16 @@ To create a standalone executable:
    - Configure your screen settings in `config.json`
 
 The executable will be created in the `dist` directory. All required resources (fonts, config samples, etc.) are automatically included in the build. Note that you must create your own config.json with your API key - this is not included in the build for security reasons.
-| 
-| **Note on PyInstaller Build Issues:** If you encounter an `ImportError: DLL load failed while importing _ctypes` when running the built executable, you may need to explicitly add `'ctypes'` to the `hiddenimports` list within the `Left4Translate.spec` file and rebuild. This ensures PyInstaller bundles the necessary libraries used by dependencies like `pyserial`.
+
+**Important:** When building the executable, ensure you use a standard Python installation (not Anaconda) to avoid issues with missing DLLs like `ffi.dll`. The recommended approach is:
+
+```bash
+# Create a clean venv using Python 3.11 or 3.12 (not Anaconda)
+py -3.12 -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+pyinstaller Left4Translate.spec
+```
 
 ## Configuration
 
