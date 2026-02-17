@@ -32,17 +32,56 @@ Left4Translate is a system designed to capture, translate, and display Left 4 De
   ```
 
 ### 3. Smart Screen Controller
-- Uses turing-smart-screen-python library
+- Uses TuringDisplay library for hardware communication
 - Manages message queue and display updates
-- Handles screen layout and formatting
+- Handles screen layout and formatting for Left4Translate messages
 - Component Interface:
   ```python
   class ScreenController:
       def connect(port: str, baud_rate: int)
       def disconnect()
-      def display_message(message: TranslatedMessage)
+      def display_message(player: str, original: str, translated: str, is_team_chat: bool = False, timeout: Optional[int] = None)
       def clear_display()
       def set_brightness(level: int)
+  ```
+
+### 3a. TuringDisplay (Reusable Display Library)
+- Generic display library for Turing Smart Screen hardware
+- Supports hardware revisions: Rev A, Rev B, Rev C, Rev D
+- Handles serial communication, buffer management, font loading, and text rendering
+- Can be reused by other applications needing Turing Smart Screen support
+- Component Interface:
+  ```python
+  class TuringDisplay:
+      def __init__(port: str, baud_rate: int = 115200, brightness: int = 80,
+                   orientation: str = "landscape", font_path: str = None,
+                   font_size: int = 14, revision: str = "A")
+      def connect() -> bool
+      def disconnect()
+      @property
+      def is_connected() -> bool
+      @property
+      def width() -> int
+      @property
+      def height() -> int
+      @property
+      def buffer() -> PIL.Image
+      @property
+      def draw() -> PIL.ImageDraw
+      @property
+      def font() -> PIL.ImageFont
+      @property
+      def font_bold() -> PIL.ImageFont
+      def clear(color: tuple = (0, 0, 0))
+      def render()
+      def display_image(image: PIL.Image)
+      def set_brightness(level: int)
+      def text_width(text: str, font: PIL.ImageFont = None) -> float
+      def wrap_text(text: str, max_width: int, font: PIL.ImageFont = None) -> list[str]
+      def draw_text(x: int, y: int, text: str, font: PIL.ImageFont = None, color: tuple = None)
+      def draw_centered_text(y: int, text: str, font: PIL.ImageFont = None, color: tuple = None)
+      def show_message(text: str, font: PIL.ImageFont = None, color: tuple = None, delay: float = 0)
+      def load_font(path: str, size: int = 14, bold: bool = False) -> PIL.ImageFont
   ```
 
 ### 4. Configuration Manager

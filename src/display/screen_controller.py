@@ -5,32 +5,9 @@ import re
 from dataclasses import dataclass
 from queue import Queue
 import threading
-import sys
-import os
-from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
 
-def get_resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller"""
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = str(Path(__file__).resolve().parent.parent.parent)
-    
-    return os.path.join(base_path, relative_path)
+from .turing_display import TuringDisplay
 
-import sys
-from pathlib import Path
-
-# Add turing library to path
-turing_path = str(Path(__file__).resolve().parent.parent.parent / 'turing-smart-screen-python')
-if turing_path not in sys.path:
-    sys.path.append(turing_path)
-
-# Import Turing library
-from library.lcd.lcd_comm_rev_a import LcdCommRevA, Orientation
-from library.lcd.color import Color
 
 @dataclass
 class DisplayMessage:
@@ -42,10 +19,17 @@ class DisplayMessage:
     is_team_chat: bool = False
     expiry: Optional[datetime] = None
 
+
 class ScreenController:
-    """Controls the Turing Smart Screen display."""
+    """Controls the Turing Smart Screen display for Left4Translate.
     
-    # Color scheme
+    This is the Left4Translate-specific message display controller that
+    manages chat messages, colors, and rendering logic while delegating
+    hardware communication and low-level rendering to the reusable
+    TuringDisplay library.
+    """
+    
+    # Color scheme - Left4Translate specific
     BACKGROUND_COLOR = (0, 0, 0)      # Black background
     PLAYER_COLOR = (0, 191, 255)      # Deep sky blue for player names
     TEAM_PLAYER_COLOR = (255, 165, 0)  # Orange for team chat names
@@ -53,10 +37,9 @@ class ScreenController:
     ARROW_COLOR = (50, 205, 50)       # Lime green for arrow
     TRANSLATED_COLOR = (144, 238, 144) # Light green for translations
     
-    # Display constants
+    # Display constants - Left4Translate specific layout
     LINE_HEIGHT = 18  # Height for each line of text
     MESSAGE_SPACING = 4  # Space between messages
-    SCREEN_HEIGHT = 320  # Landscape mode height
     
     def __init__(
         self,
@@ -66,7 +49,10 @@ class ScreenController:
         max_messages: int = 5,
         message_timeout: int = 10000,
         margin: int = 2,  # Reduced margin
-        spacing: int = 2
+        spacing: int = 2,
+        font_path: str = None,
+        font_size: int = 14,
+        revision: str = "A"
     ):
         self.port = port
         self.baud_rate = baud_rate
@@ -75,74 +61,68 @@ class ScreenController:
         self.message_timeout = message_timeout
         self.margin = margin
         self.spacing = spacing
+        self.font_size = font_size
+        self.revision = revision
         
-        self.screen = None
+        # Reusable display library - handles all hardware communication
+        self.display = TuringDisplay(
+            port=port,
+            baud_rate=baud_rate,
+            brightness=brightness,
+            orientation="landscape",
+            font_path=font_path,
+            font_size=font_size,
+            revision=revision
+        )
+        
+        # App-specific state
         self.message_queue = Queue()
         self.active_messages: List[DisplayMessage] = []
         self.running = False
         self.display_thread = None
-        self.display_buffer = None
-        self.font = None
-        self.font_bold = None
         
+        # Cache for screen dimensions
+        self._screen_height = 320  # Landscape mode height
+    
+    @property
+    def display_buffer(self):
+        """Delegate to display.buffer for backward compatibility."""
+        return self.display.buffer
+    
+    @property
+    def font(self):
+        """Delegate to display.font for backward compatibility."""
+        return self.display.font
+    
+    @property
+    def font_bold(self):
+        """Delegate to display.font_bold for backward compatibility."""
+        return self.display.font_bold
+    
+    @property
+    def screen(self):
+        """Provide backward compatibility - returns the underlying display."""
+        return self.display
+    
     def connect(self):
         """Connect to the Turing Smart Screen."""
         try:
-            # Create LCD communication object for hardware revision A
-            # Initialize with portrait dimensions (320x480)
-            self.screen = LcdCommRevA(
-                com_port=self.port,
-                display_width=320,
-                display_height=480
-            )
-            
-            # Reset screen and initialize
-            self.screen.Reset()
-            time.sleep(0.5)  # Wait after reset
-            
-            self.screen.InitializeComm()
-            time.sleep(0.5)  # Wait after init
-            
-            # Configure display
-            self.screen.SetBrightness(level=self.brightness)
-            time.sleep(0.1)  # Wait after brightness change
-            
-            # Set to landscape orientation
-            self.screen.SetOrientation(orientation=Orientation.LANDSCAPE)
-            time.sleep(0.5)  # Wait after orientation change
-            
-            # Create display buffer
-            self.display_buffer = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
-            
-            # Load fonts with absolute paths
-            try:
-                # First try the PyInstaller path
-                font_path = get_resource_path(os.path.join('res', 'fonts', 'roboto-mono'))
-                self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
-                self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
-            except Exception as e:
-                print(f"Failed to load fonts from primary path: {e}")
-                # Try the development path
-                font_path = os.path.join(str(Path(__file__).resolve().parent.parent.parent),
-                                       'turing-smart-screen-python', 'res', 'fonts', 'roboto-mono')
-                self.font = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Regular.ttf"), 14)
-                self.font_bold = ImageFont.truetype(os.path.join(font_path, "RobotoMono-Bold.ttf"), 14)
+            # Connect using the reusable display library
+            if not self.display.connect():
+                return False
             
             # Display startup message
             from main import __version__
-            draw = ImageDraw.Draw(self.display_buffer)
-            startup_msg = f"Left4Translate v{__version__}"
-            # Center the text
-            text_width = draw.textlength(startup_msg, font=self.font_bold)
-            x = (480 - text_width) // 2  # Center horizontally
-            y = 150  # Center vertically (320/2 - line height)
-            draw.text((x, y), startup_msg, font=self.font_bold, fill=self.PLAYER_COLOR)
-            self.screen.DisplayPILImage(self.display_buffer)
-            time.sleep(2)  # Show startup message for 2 seconds
+            self.display.show_message(
+                f"Left4Translate v{__version__}",
+                font=self.display.font_bold,
+                color=self.PLAYER_COLOR,
+                delay=2
+            )
             
             # Clear screen for normal operation
-            draw.rectangle([0, 0, 480, 320], fill=self.BACKGROUND_COLOR)
-            self.screen.DisplayPILImage(self.display_buffer)
+            self.display.clear()
+            self.display.render()
             
             # Start display thread
             self.running = True
@@ -160,15 +140,9 @@ class ScreenController:
         self.running = False
         if self.display_thread:
             self.display_thread.join()
-        if self.screen:
-            try:
-                # Clear screen before disconnecting
-                black_screen = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
-                self.screen.DisplayPILImage(black_screen)
-                self.screen.closeSerial()
-            except:
-                pass
-            
+        # Use the display library's disconnect
+        self.display.disconnect()
+        
     def _clean_player_name(self, name: str) -> str:
         """Clean up player name to handle special characters."""
         # Remove control characters
@@ -181,48 +155,23 @@ class ScreenController:
         name = name.strip()
         
         return name
-            
-    def _wrap_text(self, text: str, max_width: int, draw: ImageDraw.Draw, font: ImageFont.FreeTypeFont) -> list[str]:
-        """Wrap text to fit within a given width."""
-        words = text.split()
-        lines = []
-        current_line = []
-        current_width = 0
-
-        for word in words:
-            word_width = draw.textlength(word, font=font)
-            space_width = draw.textlength(" ", font=font)
-            
-            if current_line and current_width + word_width + space_width > max_width:
-                lines.append(" ".join(current_line))
-                current_line = [word]
-                current_width = word_width
-            else:
-                if current_line:
-                    current_width += space_width
-                current_line.append(word)
-                current_width += word_width
-        
-        if current_line:
-            lines.append(" ".join(current_line))
-        
-        return lines if lines else [""]  # Return at least one empty line
-
-    def _calculate_message_height(self, message: DisplayMessage, draw: ImageDraw.Draw) -> int:
+    
+    def _calculate_message_height(self, message: DisplayMessage) -> int:
         """Calculate total height needed for a message including spacing."""
+        # Use the display's wrap_text for calculations
         # Calculate available width for text (screen width minus margins and player name)
         player_text = f"[{message.player}]"
-        player_width = draw.textlength(player_text, font=self.font_bold)
-        available_width = 480 - (self.margin * 2 + 5) - player_width - 5  # Screen width minus margins and player section
+        player_width = self.display.text_width(player_text, self.display.font_bold)
+        available_width = self.display.width - (self.margin * 2 + 5) - player_width - 5
 
         # Calculate wrapped lines for original and translated text
-        original_lines = self._wrap_text(message.original, available_width, draw, self.font)
+        original_lines = self.display.wrap_text(message.original, available_width, self.display.font)
         original_height = len(original_lines) * self.LINE_HEIGHT
 
         if message.original != message.translated:
             # For translations, account for the arrow indent
             translation_width = available_width - 30  # Account for arrow and indent
-            translated_lines = self._wrap_text(message.translated, translation_width, draw, self.font)
+            translated_lines = self.display.wrap_text(message.translated, translation_width, self.display.font)
             translated_height = len(translated_lines) * self.LINE_HEIGHT
             return original_height + translated_height + self.MESSAGE_SPACING
         
@@ -263,36 +212,29 @@ class ScreenController:
             expiry=datetime.fromtimestamp(now.timestamp() + message_timeout / 1000) if message_timeout > 0 else None
         )
         
-        # Create temporary draw context for height calculations
-        temp_buffer = Image.new('RGB', (480, 320), self.BACKGROUND_COLOR)
-        draw = ImageDraw.Draw(temp_buffer)
-        
         # Calculate total height needed for all messages including the new one
         total_height = self.margin  # Start with top margin
         for msg in self.active_messages:
-            total_height += self._calculate_message_height(msg, draw)
+            total_height += self._calculate_message_height(msg)
         
         # Add height of new message
-        new_msg_height = self._calculate_message_height(message, draw)
+        new_msg_height = self._calculate_message_height(message)
         
         # Remove oldest messages until new message would fit
-        while self.active_messages and (total_height + new_msg_height > self.SCREEN_HEIGHT - self.margin):
+        while self.active_messages and (total_height + new_msg_height > self._screen_height - self.margin):
             removed_msg = self.active_messages.pop(0)
-            total_height -= self._calculate_message_height(removed_msg, draw)
+            total_height -= self._calculate_message_height(removed_msg)
             
         # Add new message only if it will fit
-        if total_height + new_msg_height <= self.SCREEN_HEIGHT - self.margin:
+        if total_height + new_msg_height <= self._screen_height - self.margin:
             self.active_messages.append(message)
         
     def clear_display(self):
         """Clear all messages from the screen."""
-        if self.screen and self.display_buffer:
-            # Clear buffer
-            draw = ImageDraw.Draw(self.display_buffer)
-            draw.rectangle([0, 0, 480, 320], fill=self.BACKGROUND_COLOR)
-            
-            # Update screen
-            self.screen.DisplayPILImage(self.display_buffer)
+        if self.display.is_connected:
+            # Clear buffer using display library
+            self.display.clear()
+            self.display.render()
             
         self.active_messages.clear()
         while not self.message_queue.empty():
@@ -300,9 +242,7 @@ class ScreenController:
             
     def set_brightness(self, level: int):
         """Set the screen brightness level (0-100)."""
-        if self.screen:
-            self.brightness = max(0, min(100, level))
-            self.screen.SetBrightness(level=self.brightness)
+        self.display.set_brightness(level)
             
     def _display_loop(self):
         """Main display update loop."""
@@ -316,7 +256,7 @@ class ScreenController:
                 
     def _update_display(self):
         """Update the screen display."""
-        if not self.screen or not self.display_buffer:
+        if not self.display.is_connected:
             return
             
         now = datetime.now()
@@ -328,9 +268,11 @@ class ScreenController:
                 if msg.expiry and msg.expiry > now
             ]
         
-        # Clear buffer
-        draw = ImageDraw.Draw(self.display_buffer)
-        draw.rectangle([0, 0, 480, 320], fill=self.BACKGROUND_COLOR)
+        # Clear buffer using display library
+        self.display.clear()
+        
+        # Get direct access to draw for more control
+        draw = self.display.draw
         
         # Start from top margin
         y = self.margin
@@ -340,33 +282,33 @@ class ScreenController:
             # Draw player name in appropriate color
             player_text = f"[{msg.player}]"  # No extra spaces in brackets
             player_color = self.TEAM_PLAYER_COLOR if msg.is_team_chat else self.PLAYER_COLOR
-            draw.text((x, y), player_text, font=self.font_bold, fill=player_color)
+            draw.text((x, y), player_text, font=self.display.font_bold, fill=player_color)
             
             # Calculate available width for text
-            text_width = draw.textlength(player_text, font=self.font_bold)
-            available_width = 480 - (self.margin * 2 + 5) - text_width - 5
+            text_width = draw.textlength(player_text, font=self.display.font_bold)
+            available_width = self.display.width - (self.margin * 2 + 5) - text_width - 5
 
             # Draw original message with word wrap
-            original_lines = self._wrap_text(msg.original, available_width, draw, self.font)
+            original_lines = self.display.wrap_text(msg.original, available_width, self.display.font)
             for line in original_lines:
-                draw.text((x + text_width + 5, y), line, font=self.font, fill=self.ORIGINAL_COLOR)
+                draw.text((x + text_width + 5, y), line, font=self.display.font, fill=self.ORIGINAL_COLOR)
                 y += self.LINE_HEIGHT
 
             # Only show translation if it's different from original
             if msg.original != msg.translated:
                 # Calculate width for translated text (account for arrow)
                 translation_width = available_width - 30
-                translated_lines = self._wrap_text(msg.translated, translation_width, draw, self.font)
+                translated_lines = self.display.wrap_text(msg.translated, translation_width, self.display.font)
                 
                 # Draw arrow and translation
                 for i, line in enumerate(translated_lines):
                     if i == 0:
-                        draw.text((x + 15, y), "→", font=self.font_bold, fill=self.ARROW_COLOR)
-                    draw.text((x + 30, y), line, font=self.font, fill=self.TRANSLATED_COLOR)
+                        draw.text((x + 15, y), "→", font=self.display.font_bold, fill=self.ARROW_COLOR)
+                    draw.text((x + 30, y), line, font=self.display.font, fill=self.TRANSLATED_COLOR)
                     y += self.LINE_HEIGHT
             
             # Add spacing between messages
             y += self.MESSAGE_SPACING
-            
-        # Update screen with complete buffer
-        self.screen.DisplayPILImage(self.display_buffer)
+        
+        # Update screen with complete buffer using display library
+        self.display.render()

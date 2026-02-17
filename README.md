@@ -1,15 +1,32 @@
-# Left4Translate v1.2.2
+# Left4Translate v1.2.3
 
 Real-time chat and voice translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.2.2-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.3-blue.svg)](https://github.com/yourusername/Left4Translate)
+
+## Architecture
+
+Left4Translate uses a modular architecture with a reusable display library:
+
+- **TuringDisplay** (`src/display/turing_display.py`): A reusable Python library for driving Turing Smart Screen displays. This module can be used independently by other projects that need to display content on a Turing Smart Screen. It handles:
+  - Hardware communication (supports Rev A, B, C, D screens)
+  - Display buffer management
+  - Font loading and text rendering
+  - Text wrapping utilities
+  - Brightness control
+
+- **ScreenController** (`src/display/screen_controller.py`): The Left4Translate-specific controller that manages chat messages, colors, and rendering logic while delegating hardware communication to TuringDisplay.
+
+This separation allows the display hardware logic to be reused in other projects while keeping Left4Translate's message management and styling specific to the game translation use case.
 
 ## Changelog
 
 ### v1.2.3
-- Fixed potential API rate limit errors by adding rate limiting to language detection calls.
+- Refactored display module to separate reusable TuringDisplay library from Left4Translate-specific ScreenController
+- TuringDisplay now supports multiple hardware revisions (Rev A, B, C, D)
+- Added text wrapping, font loading, and drawing helpers to reusable library
 
 ### v1.2.2
 - Fixed issue where chat messages weren't showing on the Turing screen at startup
