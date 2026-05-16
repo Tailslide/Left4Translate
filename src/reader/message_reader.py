@@ -115,7 +115,9 @@ class GameLogHandler(FileSystemEventHandler):
         # Chat messages have a specific format:
         # 1. Team chat: "(Survivor|Infected) ♥Name : message"
         # 2. Regular chat: "Name : message"
-        chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?[^:]+\s+:\s+.+'
+        # Use .+? (not [^:]+) so player names containing colons still match;
+        # the \s+:\s+ around the separator is what disambiguates name from message.
+        chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?.+?\s+:\s+.+'
         if re.match(chat_pattern, line):
             return False
                 
