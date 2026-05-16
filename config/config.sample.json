@@ -3,7 +3,7 @@
     "logPath": "C:/Program Files (x86)/Steam/steamapps/common/Left 4 Dead 2/left4dead2/console.log",
     "pollInterval": 1000,
     "messageFormat": {
-      "regex": "^\\((Survivor|Infected)\\)\\s*(?:C\\s*\\(Infected\\)\\s*)?([^:]+?)\\s*:\\s*(.+)$|^([^:]+?)\\s*:\\s*(.+)$",
+      "regex": "^\\((Survivor|Infected)\\)\\s*(?:C\\s*\\(Infected\\)\\s*)?(.+?)\\s+:\\s+(.+)$|^(.+?)\\s+:\\s+(.+)$",
       "groups": {
         "team": 1,
         "player": "2,4",
