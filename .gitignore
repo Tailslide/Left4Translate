@@ -42,6 +42,13 @@ src/library/
 # Turing Smart Screen library
 turing-smart-screen-python/
 
+# Built executables (copied to the repo root by build.bat)
+Left4Translate.exe
+Left4Translate-GUI.exe
+
+# Generated icon preview (regenerate with res/make_icon.py)
+res/icon_preview.png
+
 # Environment variables
 .env
 

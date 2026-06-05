@@ -82,10 +82,28 @@ def main():
 class Left4Translate:
     """Main application class."""
     
-    def __init__(self, config_path: str, mode: str = 'both'):
+    def __init__(
+        self,
+        config_path: str,
+        mode: str = 'both',
+        on_translation=None,
+        on_status=None,
+        install_signal_handlers: bool = True,
+    ):
+        """Create the application engine.
+
+        The optional ``on_translation`` / ``on_status`` callbacks let an
+        embedder (such as the desktop GUI) observe activity without changing
+        the command-line behaviour. They default to no-ops, so the CLI entry
+        point is unaffected. ``install_signal_handlers`` is disabled by the
+        GUI because ``signal.signal`` only works on the main thread.
+        """
         self.running = False
         self.mode = mode
-        
+        self._on_translation_cb = on_translation
+        self._on_status_cb = on_status
+        self._install_signal_handlers = install_signal_handlers
+
         try:
             # Load configuration
             self.config_manager = ConfigManager(config_path)
@@ -113,11 +131,36 @@ class Left4Translate:
             
         # Initialize components
         self._init_components()
-        
-        # Set up signal handlers
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
-        
+
+        # Set up signal handlers. Only valid on the main thread, so the GUI
+        # (which constructs the engine off the main thread or wants to keep
+        # its own handlers) can opt out.
+        if self._install_signal_handlers:
+            try:
+                signal.signal(signal.SIGINT, self._handle_shutdown)
+                signal.signal(signal.SIGTERM, self._handle_shutdown)
+            except ValueError:
+                # Not on the main thread — embedder is responsible for shutdown.
+                self.logger.debug("Skipping signal handler setup (not on main thread)")
+
+    def _emit_status(self, component: str, state: str, detail: str = ""):
+        """Notify an observer of a component status change (best-effort)."""
+        if self._on_status_cb is None:
+            return
+        try:
+            self._on_status_cb(component, state, detail)
+        except Exception as e:  # never let an observer break the engine
+            self.logger.debug(f"on_status observer error: {e}")
+
+    def _emit_translation(self, payload: dict):
+        """Notify an observer of a completed translation (best-effort)."""
+        if self._on_translation_cb is None:
+            return
+        try:
+            self._on_translation_cb(payload)
+        except Exception as e:
+            self.logger.debug(f"on_translation observer error: {e}")
+
     def _init_components(self):
         """Initialize application components."""
         try:
@@ -165,7 +208,8 @@ class Left4Translate:
                 self.voice_manager = VoiceTranslationManager(
                     config=config_dict,
                     translation_service=self.translator,
-                    screen_controller=self.screen
+                    screen_controller=self.screen,
+                    on_translation_callback=self._handle_voice_translation
                 )
             else:
                 self.voice_manager = None
@@ -217,10 +261,31 @@ class Left4Translate:
                 self.logger.info(f"Translated ({source_lang}): {translated}")
             else:
                 self.logger.info("Using original message")
-                
+
+            # Surface to any observer (GUI live feed).
+            self._emit_translation({
+                "kind": "chat",
+                "player": player_name,
+                "original": chat_message,
+                "translated": translated,
+                "team": team_type,
+                "source_language": locals().get("source_lang"),
+            })
+
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
-            
+
+    def _handle_voice_translation(self, transcript: str, translated: str):
+        """Receive a completed voice translation and forward it to observers."""
+        self._emit_translation({
+            "kind": "voice",
+            "player": "Voice",
+            "original": transcript,
+            "translated": translated,
+            "team": None,
+            "source_language": None,
+        })
+
     def _handle_shutdown(self, signum, frame):
         """Handle shutdown signals."""
         self.logger.info("Shutdown signal received, cleaning up...")
@@ -231,25 +296,32 @@ class Left4Translate:
         try:
             self.logger.info(f"Starting Left4Translate v{__version__}...")
             self.running = True
-            
+            self._emit_status("engine", "running")
+
             # Connect to screen
             if not self.screen.connect():
                 self.logger.error("Failed to connect to screen")
                 # Graceful degradation: continue running without screen
                 self.logger.warning("Continuing without screen - translations will be logged but not displayed")
-            
+                self._emit_status("screen", "disconnected", "Screen not connected")
+            else:
+                self._emit_status("screen", "connected")
+
             # Start chat message monitoring if enabled
             if self.reader and self.mode in ['chat', 'both']:
                 self.reader.start_monitoring(from_start=True)
                 self.logger.info("Started monitoring game log (showing last 10 lines)")
-                
+                self._emit_status("chat", "monitoring")
+
             # Start voice translation if enabled
             if self.voice_manager and self.mode in ['voice', 'both']:
                 if self.voice_manager.start():
                     self.logger.info("Started voice translation mode")
+                    self._emit_status("voice", "armed")
                 else:
                     self.logger.error("Failed to start voice translation mode")
-            
+                    self._emit_status("voice", "error", "Voice translation failed to start")
+
             # Log the active modes
             if self.mode == 'both':
                 self.logger.info("Left4Translate is running in chat and voice translation modes. Press Ctrl+C to stop.")
@@ -281,11 +353,16 @@ class Left4Translate:
                 self.voice_manager.stop()
                 
             self.screen.disconnect()
-            
+
             self.logger.info("Left4Translate stopped")
-            
+            self._emit_status("screen", "disconnected")
+            self._emit_status("voice", "idle")
+            self._emit_status("chat", "idle")
+            self._emit_status("engine", "stopped")
+
         except Exception as e:
             self.logger.error(f"Error stopping application: {e}")
+            self._emit_status("engine", "stopped")
 
 
 if __name__ == "__main__":

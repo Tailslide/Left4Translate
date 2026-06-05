@@ -1,0 +1,115 @@
+"""Tests for the desktop GUI layer.
+
+The Qt-dependent tests run under the ``offscreen`` platform plugin so they need
+no display. They're skipped automatically if PySide6 isn't installed (e.g. on a
+CLI-only checkout).
+"""
+
+from __future__ import annotations
+
+import json
+import os
+
+import pytest
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+pytest.importorskip("PySide6")
+
+from PySide6.QtCore import QSettings  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from gui import styles  # noqa: E402
+from gui.settings_tab import _bury, _dig  # noqa: E402
+
+
+@pytest.fixture(scope="module")
+def app():
+    application = QApplication.instance() or QApplication([])
+    yield application
+
+
+# ---- Pure helpers (no Qt) -------------------------------------------------
+
+def test_dig_and_bury_roundtrip():
+    data: dict = {}
+    _bury(data, "screen.display.maxMessages", 12)
+    _bury(data, "translation.apiKey", "abc")
+    assert data == {"screen": {"display": {"maxMessages": 12}}, "translation": {"apiKey": "abc"}}
+    assert _dig(data, "screen.display.maxMessages") == 12
+    assert _dig(data, "missing.path") is None
+
+
+def test_bury_preserves_siblings():
+    data = {"screen": {"port": "COM8", "brightness": 50}}
+    _bury(data, "screen.brightness", 80)
+    assert data["screen"]["port"] == "COM8"
+    assert data["screen"]["brightness"] == 80
+
+
+def test_team_color_mapping():
+    assert styles.team_color("Survivor") == styles.TEAM_SURVIVOR
+    assert styles.team_color("Infected") == styles.TEAM_INFECTED
+    assert styles.team_color(None) == styles.TEXT_PRIMARY
+
+
+def test_status_dot_color_known_and_unknown():
+    assert styles.status_dot_color("running") == styles.GREEN
+    assert styles.status_dot_color("error") == styles.RED
+    assert styles.status_dot_color("whatever") == styles.TEXT_DIM
+
+
+# ---- Widgets --------------------------------------------------------------
+
+def test_dashboard_counts_and_feed(app):
+    from gui.dashboard_tab import DashboardTab
+    from gui.engine_controller import EngineController
+
+    tab = DashboardTab(EngineController("nonexistent.json"))
+    tab.add_translation({"kind": "chat", "player": "P", "original": "hola", "translated": "hi", "team": "Survivor"})
+    tab.add_translation({"kind": "voice", "player": "Voice", "original": "uno", "translated": "one", "team": None})
+    assert tab._count == 2
+    assert tab._chars == len("hola") + len("uno")
+    assert tab._feed.rowCount() == 2
+    # Newest row is on top.
+    assert tab._feed.item(0, 2).text() == "Voice"
+    tab.reset()
+    assert tab._count == 0
+    assert tab._feed.rowCount() == 0
+
+
+def test_settings_save_then_reload(app, tmp_path):
+    from gui.settings_store import SettingsStore
+    from gui.settings_tab import SettingsTab
+
+    ini = tmp_path / "prefs.ini"
+    store = SettingsStore(QSettings(str(ini), QSettings.Format.IniFormat))
+    cfg = tmp_path / "config.json"
+
+    tab = SettingsTab(str(cfg), store)
+    tab._widgets["screen.port"].setText("COM9")
+    tab._widgets["game.pollInterval"].setValue(750)
+    tab._widgets["voice_translation.enabled"].setChecked(True)
+    tab.save()
+
+    on_disk = json.loads(cfg.read_text())
+    assert on_disk["screen"]["port"] == "COM9"
+    assert on_disk["game"]["pollInterval"] == 750
+    assert on_disk["voice_translation"]["enabled"] is True
+
+    # A fresh tab should read those values back into its widgets.
+    tab2 = SettingsTab(str(cfg), store)
+    assert tab2._widgets["screen.port"].text() == "COM9"
+    assert tab2._widgets["game.pollInterval"].value() == 750
+    assert tab2._widgets["voice_translation.enabled"].isChecked() is True
+
+
+def test_engine_controller_status_signal(app):
+    from gui.engine_controller import EngineController
+
+    controller = EngineController("nonexistent.json")
+    received = []
+    controller.status.connect(lambda c, s, d: received.append((c, s, d)))
+    controller._on_status("screen", "connected", "")
+    controller._on_translation({"kind": "chat", "original": "x", "translated": "y"})
+    assert ("screen", "connected", "") in received
