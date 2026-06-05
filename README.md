@@ -86,6 +86,35 @@ This separation allows the display hardware logic to be reused in other projects
 - Configurable display settings
 - Extensive logging for troubleshooting with privacy-focused audio data handling
 
+### Desktop GUI (New!)
+Left4Translate ships in **two flavours** that share the same translation engine:
+
+- **`Left4Translate.exe`** — the original console app.
+- **`Left4Translate-GUI.exe`** — a full Windows desktop app (PySide6). No console
+  window; everything is driven from the UI.
+
+The GUI provides:
+- **Dashboard** — live status pills (engine / screen / chat / voice), at-a-glance
+  stat cards (messages translated, per-minute rate, cache usage, characters,
+  uptime), and a **live translation feed** mirroring what scrolls across the
+  Turing screen, color-coded by team (Survivor / Infected / Voice).
+- **Voice** — push-to-talk status, microphone level meter, the configured
+  trigger/device/target language, and the most recent transcription → translation.
+- **Settings** — a full editor for `config.json` (game log path, API key, screen
+  port, target language, voice options) plus app preferences (theme, default
+  mode, tray behaviour). Saves are written straight back to `config.json`.
+- **Logs** — a live, color-by-level view of all console output (the same logging
+  the CLI prints), with a level filter, auto-scroll, and clear.
+- **System tray** — minimize-to-tray on close, start/stop the engine and restore
+  the window from the tray, and start minimized if preferred.
+- **Auto-start** — begins translating on launch (configurable) with a header
+  Start/Stop toggle and a chat/voice/both mode selector.
+
+The look (dark theme, orange accent, Segoe UI) is intentionally matched to the
+companion **l4d2gamefinder** app so the two tools feel like one product family.
+
+Run from source with: `python gui_main.py`
+
 ## Requirements
 
 - Python 3.10 - 3.13 (Recommended: 3.11)
@@ -133,9 +162,29 @@ Without proper service account credentials, the voice translation feature will n
    - Add the path to this file in the `voice_translation.speech_to_text.credentials_path` setting in `config.json`
 6. Configure your screen settings in `config.json`
 
-### Building Executable
+### Building Executable(s)
 
-To create a standalone executable:
+There are two build targets — the console app and the desktop GUI. The easiest
+way to build on Windows is the bundled `build.bat`:
+
+```bat
+build.bat gui    :: builds Left4Translate-GUI.exe (desktop GUI, default)
+build.bat cli    :: builds Left4Translate.exe     (console app)
+build.bat all    :: builds both
+```
+
+`build.bat` syncs `requirements.txt`, runs PyInstaller against the matching
+spec, and copies the resulting `.exe` to the project root. To build manually:
+
+```bash
+pyinstaller Left4Translate-gui.spec   # desktop GUI  -> dist/Left4Translate-GUI.exe
+pyinstaller Left4Translate.spec       # console app  -> dist/Left4Translate.exe
+```
+
+The GUI build bundles PySide6 and the app icon (`res/icon.ico`); regenerate the
+icon if desired with `python res/make_icon.py`.
+
+To create a standalone executable from scratch:
 
 1. Create and activate a virtual environment (recommended):
    ```bash
@@ -144,7 +193,7 @@ To create a standalone executable:
    source venv/bin/activate # Linux/Mac
    ```
 2. Install dependencies: `pip install -r requirements.txt`
-3. Build the executable: `pyinstaller Left4Translate.spec`
+3. Build the executable: `pyinstaller Left4Translate.spec` (or `build.bat all`)
 4. Create your configuration:
    - Copy `config.sample.json` from the dist directory to `config.json`
    - Add your Google Cloud Translation API key to `config.json`
@@ -266,6 +315,20 @@ For detailed information about voice translation configuration options, see [Voi
 ### For Both Features
 
 Run the translator with both features enabled: `python src/main.py --mode both` (or simply `python src/main.py` as 'both' is the default)
+
+### Using the Desktop GUI
+
+Instead of the command line, run the GUI and control everything from the window:
+
+```bash
+python gui_main.py            # from source
+Left4Translate-GUI.exe        # packaged build
+```
+
+The mode (chat / voice / both) is selected from the header dropdown, and the
+engine auto-starts on launch (toggle this and the theme/tray behaviour under
+**Settings**). Closing the window minimizes it to the system tray; quit from the
+tray icon's right-click menu.
 
 ## Testing
 
