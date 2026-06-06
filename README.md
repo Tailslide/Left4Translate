@@ -6,6 +6,17 @@ See here for more info on screens: https://github.com/mathoudebine/turing-smart-
 
 [![Version](https://img.shields.io/badge/version-1.2.6-blue.svg)](https://github.com/yourusername/Left4Translate)
 
+Available as both a **console app** and a **full Windows desktop GUI** (with a
+live translation feed, system-tray support, and an in-app config editor — see
+[Desktop GUI](#desktop-gui-new)).
+
+![Left4Translate desktop GUI — Dashboard](docs/images/gui-dashboard.png)
+
+<p align="center">
+  <img src="docs/images/gui-voice.png" alt="Voice tab" width="49%" />
+  <img src="docs/images/gui-settings.png" alt="Settings tab" width="49%" />
+</p>
+
 ## Architecture
 
 Left4Translate uses a modular architecture with a reusable display library:
