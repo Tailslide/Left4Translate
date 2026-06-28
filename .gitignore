@@ -55,3 +55,4 @@ res/icon_preview.png
 # Operating System
 .DS_Store
 Thumbs.db
+config/keyfile.json
