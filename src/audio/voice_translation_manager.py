@@ -311,17 +311,23 @@ class VoiceTranslationManager:
             logger.info("Copying to clipboard...")
             self.clipboard_manager.copy_to_clipboard(transcript, translated)
             
-            # Display on screen if screen controller is available
+            # Display on screen if a screen controller is available. This is
+            # best-effort: when the Turing screen isn't connected (e.g. running
+            # with the overlay only) display_message raises, and that must not
+            # stop the translation from reaching the callback below.
             if self.screen_controller:
                 logger.info("Displaying on screen...")
-                self.screen_controller.display_message(
-                    player="Voice",
-                    original=transcript,
-                    translated=translated,
-                    is_team_chat=False,
-                    timeout=self.clear_after if self.clear_after > 0 else None
-                )
-            
+                try:
+                    self.screen_controller.display_message(
+                        player="Voice",
+                        original=transcript,
+                        translated=translated,
+                        is_team_chat=False,
+                        timeout=self.clear_after if self.clear_after > 0 else None
+                    )
+                except Exception as e:
+                    logger.error(f"Error displaying voice translation on screen: {e}")
+
             # Call callback with results
             if self.on_translation_callback:
                 logger.info("Calling translation callback...")
