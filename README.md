@@ -34,6 +34,16 @@ This separation allows the display hardware logic to be reused in other projects
 
 ## Changelog
 
+### Unreleased
+- Added an **always-on-top translation overlay** — a software stand-in for the
+  Turing Smart Screen. Toggle it from the **Overlay** button in the GUI header.
+  It floats over a borderless/windowed game without stealing keyboard focus
+  (uses `WS_EX_NOACTIVATE` on Windows), is draggable/resizable, has adjustable
+  opacity, and mirrors the Turing screen's styling and colors.
+- Added a `screen.enabled` config flag (and a **Use hardware Turing screen**
+  toggle in Settings) so you can run with no Turing hardware at all — the engine
+  skips the serial connection and feeds translations to the overlay instead.
+
 ### v1.2.7
 - Refactored display module to separate reusable TuringDisplay library from Left4Translate-specific ScreenController
 - TuringDisplay now supports multiple hardware revisions (Rev A, B, C, D)
@@ -126,12 +136,39 @@ companion **l4d2gamefinder** app so the two tools feel like one product family.
 
 Run from source with: `python gui_main.py`
 
+#### On-screen overlay (no hardware needed)
+
+If you don't have a Turing Smart Screen — or just want the output on the same
+monitor as the game — click **Overlay** in the GUI header. This opens a small,
+always-on-top window that mirrors what would scroll across the Turing screen
+(player names, original text, and the green-arrow translation), styled the same
+way.
+
+- **Floats over the game without stealing focus.** Run Left 4 Dead 2 in
+  *borderless / windowed-fullscreen* mode and the overlay stays on top while
+  keyboard input keeps going to the game (on Windows it's marked
+  `WS_EX_NOACTIVATE`, so even clicking its title bar won't pull focus away).
+  *Note:* true **exclusive** fullscreen paints over all top-most windows, so use
+  borderless/windowed mode for the overlay to be visible.
+- **Draggable and resizable** — drag the title bar to move it, drag the
+  bottom-right corner to resize. Position, size, opacity, and whether it was open
+  are remembered between sessions.
+- The title bar has buttons to lower/raise opacity (`–` / `+`), clear messages
+  (`⌫`), and hide the overlay (`✕`).
+
+To run with **no Turing hardware at all**, uncheck **Use hardware Turing screen**
+under **Settings → Turing Screen** (or set `"screen": { "enabled": false }` in
+`config.json`). The engine then skips the serial connection entirely and feeds
+translations straight to the overlay / live feed.
+
 ## Requirements
 
 - Python 3.10 - 3.13 (Recommended: 3.11)
   - Note: Python 3.14+ is not yet fully supported as many dependencies do not have pre-built wheels, requiring a C++ compiler and Rust toolchain to build from source.
 - Left 4 Dead 2 (for chat translation feature)
-- Turing Smart Screen
+- Turing Smart Screen — **optional**. You can instead use the always-on-top
+  on-screen overlay (see [On-screen overlay](#on-screen-overlay-no-hardware-needed)).
+  To use the hardware screen:
     See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
     See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 - Google Cloud Authentication:

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from gui.dashboard_tab import DashboardTab
 from gui.engine_controller import EngineController
 from gui.logs_tab import LogsTab
+from gui.overlay_window import OverlayWindow
 from gui.settings_store import MODES, SettingsStore
 from gui.settings_tab import SettingsTab
 from gui.theme import apply_theme
@@ -64,10 +65,13 @@ class MainWindow(QMainWindow):
         self.setStatusBar(QStatusBar(self))
         self.statusBar().showMessage("Ready")
 
+        self._overlay = OverlayWindow(self._store)
+
         self._tray = self._build_tray()
         self._restore_geometry()
         self._wire_signals()
         self._set_ui_running(False)
+        self._restore_overlay()
 
     # ---- Construction ---------------------------------------------------
 
@@ -95,6 +99,16 @@ class MainWindow(QMainWindow):
         self._start_button.setObjectName("PrimaryButton")
         self._start_button.clicked.connect(self._toggle_engine)
         row.addWidget(self._start_button)
+
+        self._overlay_button = QPushButton("Overlay")
+        self._overlay_button.setCheckable(True)
+        self._overlay_button.setToolTip(
+            "Show an always-on-top translation overlay (a software stand-in for "
+            "the Turing screen). Floats over a borderless/windowed game without "
+            "stealing focus."
+        )
+        self._overlay_button.toggled.connect(self._toggle_overlay)
+        row.addWidget(self._overlay_button)
 
         row.addStretch(1)
 
@@ -167,6 +181,21 @@ class MainWindow(QMainWindow):
         self._show_status(f"Starting translation ({mode})…")
         self._controller.start(mode)
 
+    # ---- Overlay --------------------------------------------------------
+
+    def _restore_overlay(self) -> None:
+        """Re-open the overlay on launch if it was visible last session."""
+        if self._store.overlay_visible():
+            self._overlay_button.setChecked(True)
+
+    def _toggle_overlay(self, checked: bool) -> None:
+        if checked:
+            self._overlay.show()
+            self._overlay.raise_()
+        else:
+            self._overlay.hide()
+        self._store.set_overlay_visible(checked)
+
     def maybe_autostart(self) -> None:
         if self._store.autostart():
             self._toggle_engine()
@@ -183,6 +212,7 @@ class MainWindow(QMainWindow):
 
     def _on_translation(self, payload: dict) -> None:
         self.dashboard_tab.add_translation(payload)
+        self._overlay.add_translation(payload)
         if payload.get("kind") == "voice":
             self.voice_tab.add_voice_translation(payload)
 
@@ -265,6 +295,9 @@ class MainWindow(QMainWindow):
 
         self._store.set_geometry(self.saveGeometry())
         self._store.set_window_state(self.saveState())
+        if self._overlay.isVisible():
+            self._overlay.save_geometry()
+        self._overlay.close()
         self._controller.stop()
         self.logs_tab.detach()
         self.logs_tab.release_streams()

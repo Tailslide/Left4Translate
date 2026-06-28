@@ -41,12 +41,17 @@ class SettingsStore:
     KEY_START_MINIMIZED = "tray/start_minimized"
     KEY_GEOMETRY = "window/geometry"
     KEY_WINDOW_STATE = "window/state"
+    KEY_OVERLAY_VISIBLE = "overlay/visible"
+    KEY_OVERLAY_GEOMETRY = "overlay/geometry"
+    KEY_OVERLAY_OPACITY = "overlay/opacity"
 
     DEFAULT_THEME = THEME_DARK
     DEFAULT_MODE = "both"
     DEFAULT_AUTOSTART = True
     DEFAULT_MINIMIZE_TO_TRAY = True
     DEFAULT_START_MINIMIZED = False
+    DEFAULT_OVERLAY_VISIBLE = False
+    DEFAULT_OVERLAY_OPACITY = 0.9
 
     def __init__(self, qsettings: Optional[QSettings] = None) -> None:
         self._settings = qsettings if qsettings is not None else QSettings()
@@ -121,3 +126,31 @@ class SettingsStore:
 
     def set_window_state(self, value: QByteArray) -> None:
         self._settings.setValue(self.KEY_WINDOW_STATE, value)
+
+    # ---- Overlay window -------------------------------------------------
+
+    def overlay_visible(self) -> bool:
+        return _coerce_bool(
+            self._settings.value(self.KEY_OVERLAY_VISIBLE, self.DEFAULT_OVERLAY_VISIBLE),
+            self.DEFAULT_OVERLAY_VISIBLE,
+        )
+
+    def set_overlay_visible(self, value: bool) -> None:
+        self._settings.setValue(self.KEY_OVERLAY_VISIBLE, bool(value))
+
+    def overlay_geometry(self) -> Optional[QByteArray]:
+        value = self._settings.value(self.KEY_OVERLAY_GEOMETRY)
+        return value if isinstance(value, QByteArray) and not value.isEmpty() else None
+
+    def set_overlay_geometry(self, value: QByteArray) -> None:
+        self._settings.setValue(self.KEY_OVERLAY_GEOMETRY, value)
+
+    def overlay_opacity(self) -> float:
+        try:
+            value = float(self._settings.value(self.KEY_OVERLAY_OPACITY, self.DEFAULT_OVERLAY_OPACITY))
+        except (TypeError, ValueError):
+            return self.DEFAULT_OVERLAY_OPACITY
+        return min(1.0, max(0.3, value))
+
+    def set_overlay_opacity(self, value: float) -> None:
+        self._settings.setValue(self.KEY_OVERLAY_OPACITY, float(value))
