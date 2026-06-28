@@ -205,10 +205,12 @@ class Left4Translate:
                 self.reader = None
                 
             # Initialize voice translation manager if mode is 'voice' or 'both'
-            if self.mode in ['voice', 'both']:
-                # Get the full config dictionary
-                config_dict = self.config_manager.get_config()
-                
+            # AND voice translation is enabled in config. Constructing the
+            # manager probes the microphone and validates speech-to-text
+            # credentials, so we skip it entirely when voice is disabled.
+            config_dict = self.config_manager.get_config()
+            voice_enabled = config_dict.get("voice_translation", {}).get("enabled", True)
+            if self.mode in ['voice', 'both'] and voice_enabled:
                 # Initialize voice translation manager
                 self.voice_manager = VoiceTranslationManager(
                     config=config_dict,
@@ -217,6 +219,10 @@ class Left4Translate:
                     on_translation_callback=self._handle_voice_translation
                 )
             else:
+                if self.mode in ['voice', 'both'] and not voice_enabled:
+                    self.logger.info(
+                        "Voice translation disabled in config - skipping initialization"
+                    )
                 self.voice_manager = None
                 
         except Exception as e:
@@ -254,14 +260,20 @@ class Left4Translate:
                 self.logger.error(f"Translation error: {e}")
                 translated = chat_message  # Use original message if translation fails
             
-            # Display message
-            self.screen.display_message(
-                player=player_name,
-                original=chat_message,
-                translated=translated,
-                is_team_chat=bool(team_type)  # True if team chat (Survivor/Infected)
-            )
-            
+            # Display message on the Turing screen (only when the hardware screen
+            # is enabled). This is best-effort: a screen error must never stop the
+            # translation from reaching observers (e.g. the GUI overlay/feed).
+            if self.screen_enabled:
+                try:
+                    self.screen.display_message(
+                        player=player_name,
+                        original=chat_message,
+                        translated=translated,
+                        is_team_chat=bool(team_type)  # True if team chat (Survivor/Infected)
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error displaying message on screen: {e}")
+
             if translated != chat_message:
                 self.logger.info(f"Translated ({source_lang}): {translated}")
             else:
@@ -329,6 +341,9 @@ class Left4Translate:
                 else:
                     self.logger.error("Failed to start voice translation mode")
                     self._emit_status("voice", "error", "Voice translation failed to start")
+            elif self.mode in ['voice', 'both']:
+                # Voice requested by mode but disabled in config — not an error.
+                self._emit_status("voice", "idle", "Voice disabled")
 
             # Log the active modes
             if self.mode == 'both':
