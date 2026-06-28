@@ -178,6 +178,11 @@ class Left4Translate:
                 retry_attempts=trans_config.retry_attempts
             )
             
+            # Whether the physical Turing Smart Screen is in use. When disabled,
+            # the engine skips the serial connection entirely — translations are
+            # still logged and surfaced to observers (e.g. the GUI overlay).
+            self.screen_enabled = getattr(screen_config, "enabled", True)
+
             # Initialize screen controller
             self.screen = ScreenController(
                 port=screen_config.port,
@@ -298,8 +303,11 @@ class Left4Translate:
             self.running = True
             self._emit_status("engine", "running")
 
-            # Connect to screen
-            if not self.screen.connect():
+            # Connect to screen (unless the hardware screen is disabled in config)
+            if not self.screen_enabled:
+                self.logger.info("Turing screen disabled in config - skipping hardware connection")
+                self._emit_status("screen", "disconnected", "Screen disabled")
+            elif not self.screen.connect():
                 self.logger.error("Failed to connect to screen")
                 # Graceful degradation: continue running without screen
                 self.logger.warning("Continuing without screen - translations will be logged but not displayed")
@@ -351,8 +359,9 @@ class Left4Translate:
                 
             if self.voice_manager:
                 self.voice_manager.stop()
-                
-            self.screen.disconnect()
+
+            if self.screen_enabled:
+                self.screen.disconnect()
 
             self.logger.info("Left4Translate stopped")
             self._emit_status("screen", "disconnected")

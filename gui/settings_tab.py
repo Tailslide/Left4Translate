@@ -50,6 +50,7 @@ _FIELDS: List[Tuple[str, str]] = [
     ("translation.targetLanguage", "text"),
     ("translation.cacheSize", "int"),
     ("translation.rateLimitPerMinute", "int"),
+    ("screen.enabled", "bool"),
     ("screen.port", "text"),
     ("screen.baudRate", "int"),
     ("screen.brightness", "int"),
@@ -136,6 +137,7 @@ class SettingsTab(QWidget):
             ("translation.rateLimitPerMinute", "Rate limit / min", "int:1:100000"),
         ]))
         self._form_root.addWidget(self._group("Turing Screen", [
+            ("screen.enabled", "Use hardware Turing screen (uncheck to use the overlay only)", "bool"),
             ("screen.port", "Serial port", "text"),
             ("screen.baudRate", "Baud rate", "int:9600:1000000"),
             ("screen.brightness", "Brightness", "int:0:100"),
@@ -298,6 +300,10 @@ class SettingsTab(QWidget):
             if widget is None:
                 continue
             value = _dig(self._raw, path)
+            # screen.enabled is new: absent in older configs means "on", so the
+            # hardware screen isn't silently disabled on the next Save.
+            if value is None and path == "screen.enabled":
+                value = True
             self._set_widget_value(widget, kind, value)
 
     def save(self) -> None:

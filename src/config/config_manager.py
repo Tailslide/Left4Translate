@@ -27,6 +27,7 @@ class ScreenConfig:
     brightness: int
     refresh_rate: int
     display: Dict[str, Any]
+    enabled: bool = True
 
 @dataclass
 class LoggingConfig:
@@ -132,7 +133,8 @@ class ConfigManager:
             baud_rate=config.get("baudRate", 115200),
             brightness=config.get("brightness", 80),
             refresh_rate=config.get("refreshRate", 1000),
-            display=config.get("display", {})
+            display=config.get("display", {}),
+            enabled=config.get("enabled", True)
         )
         
     def get_logging_config(self) -> LoggingConfig:

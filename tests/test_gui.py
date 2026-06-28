@@ -113,3 +113,76 @@ def test_engine_controller_status_signal(app):
     controller._on_status("screen", "connected", "")
     controller._on_translation({"kind": "chat", "original": "x", "translated": "y"})
     assert ("screen", "connected", "") in received
+
+
+# ---- Overlay window -------------------------------------------------------
+
+def _count_overlay_messages(overlay) -> int:
+    from gui.overlay_window import _MessageLabel
+
+    return sum(
+        1
+        for i in range(overlay._body_layout.count())
+        if isinstance(overlay._body_layout.itemAt(i).widget(), _MessageLabel)
+    )
+
+
+def test_overlay_add_and_clear(app, tmp_path):
+    from gui.overlay_window import OverlayWindow
+    from gui.settings_store import SettingsStore
+
+    store = SettingsStore(QSettings(str(tmp_path / "p.ini"), QSettings.Format.IniFormat))
+    overlay = OverlayWindow(store)
+
+    overlay.add_translation({"kind": "chat", "player": "Bob", "original": "hola",
+                             "translated": "hi", "team": "Survivor"})
+    overlay.add_translation({"kind": "voice", "player": "Voice", "original": "uno",
+                             "translated": "one", "team": None})
+    assert _count_overlay_messages(overlay) == 2
+    assert overlay._hint.isVisibleTo(overlay) is False
+
+    overlay.clear()
+    assert _count_overlay_messages(overlay) == 0
+    assert overlay._hint.isVisibleTo(overlay) is True
+
+
+def test_overlay_trims_to_max(app, tmp_path):
+    from gui.overlay_window import _MAX_MESSAGES, OverlayWindow
+    from gui.settings_store import SettingsStore
+
+    store = SettingsStore(QSettings(str(tmp_path / "p.ini"), QSettings.Format.IniFormat))
+    overlay = OverlayWindow(store)
+    for i in range(_MAX_MESSAGES + 5):
+        overlay.add_translation({"kind": "chat", "player": f"P{i}",
+                                 "original": str(i), "translated": str(i), "team": None})
+    assert _count_overlay_messages(overlay) == _MAX_MESSAGES
+
+
+def test_overlay_opacity_persists(app, tmp_path):
+    from gui.overlay_window import OverlayWindow
+    from gui.settings_store import SettingsStore
+
+    settings = QSettings(str(tmp_path / "p.ini"), QSettings.Format.IniFormat)
+    store = SettingsStore(settings)
+    overlay = OverlayWindow(store)
+    start = overlay._opacity
+    overlay._decrease_opacity()
+    assert overlay._opacity < start
+    # Persisted to the store so a new overlay restores it.
+    assert SettingsStore(settings).overlay_opacity() == overlay._opacity
+
+
+def test_settings_screen_enabled_defaults_on_when_absent(app, tmp_path):
+    from gui.settings_store import SettingsStore
+    from gui.settings_tab import SettingsTab
+
+    store = SettingsStore(QSettings(str(tmp_path / "prefs.ini"), QSettings.Format.IniFormat))
+    cfg = tmp_path / "config.json"
+    # An older config with no screen.enabled key.
+    cfg.write_text(json.dumps({"screen": {"port": "COM8"}}))
+
+    tab = SettingsTab(str(cfg), store)
+    # Absent should load as enabled, so a Save won't disable the hardware screen.
+    assert tab._widgets["screen.enabled"].isChecked() is True
+    tab.save()
+    assert json.loads(cfg.read_text())["screen"]["enabled"] is True
