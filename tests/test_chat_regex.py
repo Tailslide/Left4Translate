@@ -1,5 +1,5 @@
 import re
-import sys
+
 import pytest
 
 test_messages = [
@@ -73,13 +73,3 @@ def test_chat_pattern(line, expected):
     match = re.match(pattern, line)
     result = bool(match)
     assert result == expected, f"Expected {expected} for line: {line}"
-    
-    if match and expected:
-        team_type = match.group(1) or "None"  # None for regular chat
-        player = match.group(2).strip()  # Remove extra spaces
-        message = match.group(3)
-        # These prints are useful for debugging but not necessary for pytest
-        # print(f"\nMatch found in: '{line}'")
-        # print(f"  Team: {team_type}")
-        # print(f"  Player: '{player}'")
-        # print(f"  Message: '{message}'")

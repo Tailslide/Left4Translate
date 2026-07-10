@@ -54,7 +54,7 @@ class ConfigManager:
             with open(self.config_path, 'r') as f:
                 self.config = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in configuration file: {e}")
+            raise ValueError(f"Invalid JSON in configuration file: {e}") from e
             
     def validate_config(self) -> List[str]:
         """Validate the configuration and return list of errors."""

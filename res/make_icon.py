@@ -53,8 +53,9 @@ def _font(size, cjk=False):
 
 
 def _centered_text(draw, center, text, font, fill):
-    l, t, r, b = draw.textbbox((0, 0), text, font=font)
-    draw.text((center[0] - (r - l) / 2 - l, center[1] - (b - t) / 2 - t),
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    draw.text((center[0] - (right - left) / 2 - left,
+               center[1] - (bottom - top) / 2 - top),
               text, font=font, fill=fill)
 
 

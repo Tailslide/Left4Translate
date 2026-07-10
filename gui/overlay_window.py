@@ -25,7 +25,6 @@ from html import escape
 from typing import Any, Deque, Dict, Optional
 
 from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,

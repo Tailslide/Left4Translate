@@ -2,10 +2,8 @@
 """Test cases for gaming slang translations."""
 
 import unittest
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from src.translator.translation_service import TranslationService
+
+from translator.translation_service import TranslationService
 
 class TestSlangTranslation(unittest.TestCase):
     """Test cases for gaming slang translations."""
@@ -54,7 +52,11 @@ class TestSlangTranslation(unittest.TestCase):
             "a huevo": "hell yeah",
             "no mames": "no way"
         }
-        
+        for input_text, expected in test_cases.items():
+            result, was_slang = self.service._translate_slang(input_text)
+            self.assertTrue(was_slang, f"Expected slang hit for: {input_text}")
+            self.assertEqual(result, expected)
+
     def test_mixed_slang(self):
         """Test phrases containing both slang and regular words."""
         # Test mixed phrases (should not be handled by _translate_slang)

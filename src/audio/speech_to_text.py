@@ -4,7 +4,7 @@ Speech-to-text service for voice translation feature.
 import logging
 import os
 import io
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional
 import numpy as np
 from google.cloud import speech
 from google.oauth2 import service_account
@@ -83,7 +83,7 @@ class SpeechToTextService:
                 try:
                     credentials = service_account.Credentials.from_service_account_file(self.credentials_path)
                     client = speech.SpeechClient(credentials=credentials)
-                    logger.info(f"Successfully initialized Speech-to-Text client with credentials")
+                    logger.info("Successfully initialized Speech-to-Text client with credentials")
                     return client
                 except Exception as cred_error:
                     logger.error(f"Failed to initialize client with credentials file: {cred_error}")

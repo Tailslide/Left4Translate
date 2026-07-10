@@ -1,8 +1,7 @@
 from typing import Dict, Optional
 from cachetools import LRUCache
-from google.cloud import translate_v2 as translate
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
 import logging
 import re
@@ -364,7 +363,7 @@ class TranslationService:
                     
                     # Only substitute slang if Google Translate didn't change the word
                     slang_dict = self._get_slang_translations()
-                    for i, (orig, trans) in enumerate(zip(original_words, translated_words)):
+                    for i, (orig, trans) in enumerate(zip(original_words, translated_words, strict=False)):
                         if orig.lower() == trans.lower() and orig.lower() in slang_dict:
                             translated_words[i] = slang_dict[orig.lower()]
                     
@@ -385,13 +384,13 @@ class TranslationService:
                     attempts += 1
                     logging.error(f"HTTP Error on attempt {attempts}: {str(e)}")
                     if attempts >= self.retry_attempts:
-                        raise Exception(f"Translation failed after {attempts} attempts: {e}")
+                        raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
                     time.sleep(1)  # Wait before retry
                 except Exception as e:
                     attempts += 1
                     logging.error(f"Unexpected error on attempt {attempts}: {str(e)}")
                     if attempts >= self.retry_attempts:
-                        raise Exception(f"Translation failed after {attempts} attempts: {e}")
+                        raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
                     time.sleep(1)  # Wait before retry
             else:
                 time.sleep(0.1)  # Wait for rate limit
@@ -455,7 +454,7 @@ class TranslationService:
             raise  # Re-raise the error to be handled by the translate method
         except Exception as e:
             logging.error(f"Unexpected error during language detection: {str(e)}")
-            raise Exception(f"Language detection failed: {e}")
+            raise Exception(f"Language detection failed: {e}") from e
             
     def clear_cache(self):
         """Clear the translation cache."""

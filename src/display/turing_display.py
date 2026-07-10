@@ -184,19 +184,8 @@ class TuringDisplay:
         _setup_turing_library_path()
         
         from library.lcd.lcd_comm import Orientation
-        from library.lcd.color import Color
         
-        # Map revision to class
-        revision_map = {
-            "A": "LcdCommRevA",
-            "B": "LcdCommRevB",
-            "C": "LcdCommRevC",
-            "D": "LcdCommRevD",
-        }
-        
-        class_name = revision_map.get(self.revision, "LcdCommRevA")
-        
-        # Import the appropriate class
+        # Import the appropriate class for this hardware revision.
         if self.revision == "A":
             from library.lcd.lcd_comm_rev_a import LcdCommRevA
             return LcdCommRevA, Orientation

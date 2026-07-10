@@ -77,7 +77,7 @@ def main():
                 else:
                     peak_db = -100
                 
-                print(f"Audio levels from default device:")
+                print("Audio levels from default device:")
                 print(f"  RMS: {rms_db:.1f} dB")
                 print(f"  Peak: {peak_db:.1f} dB")
                 

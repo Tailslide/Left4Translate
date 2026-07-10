@@ -64,7 +64,7 @@ def main():
             retry_attempts=translation_config.retry_attempts
         )
         
-        print(f"Starting translation test...")
+        print("Starting translation test...")
         print(f"Log file path: {log_path}")
         print(f"Message pattern: {message_pattern}")
         print(f"Mode: {'Read existing content and exit' if args.read_once else 'Monitor continuously'}")

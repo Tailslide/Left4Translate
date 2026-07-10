@@ -13,7 +13,7 @@ from reader.message_reader import GameMessageReader, Message
 
 def message_callback(message: Message):
     """Callback function to handle detected messages."""
-    print(f"\nNew message detected:")
+    print("\nNew message detected:")
     if message.team:
         print(f"Team: {message.team}")
     print(f"Player: {message.player}")
@@ -55,7 +55,7 @@ def main():
         log_path = args.log_path if args.log_path else game_config.log_path
         message_pattern = game_config.message_format["regex"]
         
-        print(f"Starting message reader test...")
+        print("Starting message reader test...")
         print(f"Log file path: {log_path}")
         print(f"Message pattern: {message_pattern}")
         if args.read_once:

@@ -2,7 +2,6 @@
 Mouse input handler for voice translation feature.
 """
 import logging
-import threading
 from typing import Callable, List, Optional
 from pynput import mouse
 

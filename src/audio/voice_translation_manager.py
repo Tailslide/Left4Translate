@@ -3,7 +3,6 @@ Voice translation manager for voice translation feature.
 """
 import logging
 import threading
-import time
 import numpy as np
 from typing import Optional, Dict, Any, Callable
 
@@ -104,10 +103,11 @@ class VoiceTranslationManager:
             format=clipboard_config.get("format", "both")
         )
         
-        # Translation settings
+        # Translation settings. ``config`` here is already the
+        # ``voice_translation`` section, so its translation options live at
+        # ``config["translation"]`` — not under another nested key.
         translation_config = config.get("translation", {})
-        voice_translation_config = config.get("voice_translation", {}).get("translation", {})
-        self.target_language = voice_translation_config.get("target_language", "es")
+        self.target_language = translation_config.get("target_language", "es")
         
         # Display settings
         display_config = config.get("display", {})

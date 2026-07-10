@@ -3,8 +3,6 @@ Voice recorder for voice translation feature.
 """
 import logging
 import threading
-import time
-import os
 from typing import Optional, Callable, Any
 import numpy as np
 import sounddevice as sd
@@ -98,7 +96,7 @@ class VoiceRecorder:
                         break
             
             if device_info:
-                logger.info(f"Device details:")
+                logger.info("Device details:")
                 logger.info(f"  Name: {device_info['name']}")
                 logger.info(f"  Max input channels: {device_info['max_input_channels']}")
                 logger.info(f"  Default sample rate: {device_info['default_samplerate']}")
@@ -245,7 +243,7 @@ class VoiceRecorder:
             self.stream.start()
             self.recording = True
             
-            logger.info(f"Successfully started recording audio")
+            logger.info("Successfully started recording audio")
             return True
             
         except Exception as e:

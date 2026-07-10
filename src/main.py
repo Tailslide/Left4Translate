@@ -72,7 +72,7 @@ def main():
     config_path = resolve_config_path(args, exe_dir)
     
     # Set up logging first
-    logger = setup_logging(config_path)
+    setup_logging(config_path)
     
     # Run the application
     app = Left4Translate(config_path, args.mode)
