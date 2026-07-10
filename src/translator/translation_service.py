@@ -281,7 +281,15 @@ class TranslationService:
         target_lang = target_language or self.target_language
         # Clean the text first
         cleaned_text = self._clean_text(text)
-        
+
+        # Local slang translation needs no API call, so it runs before every
+        # other bail-out — in particular before the untranslatable-content
+        # check, which would otherwise swallow short slang like "si" or "f".
+        slang_translated, was_slang = self._translate_slang(cleaned_text)
+        if was_slang:
+            logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
+            return slang_translated
+
         # Skip translation for untranslatable content
         if is_untranslatable_content(cleaned_text):
             logging.debug(f"Skipping translation for untranslatable content: '{text}'")
@@ -298,12 +306,6 @@ class TranslationService:
         while attempts < self.retry_attempts:
             if self.rate_limiter.acquire():
                 try:
-                    # Try to translate the entire phrase as slang first
-                    slang_translated, was_slang = self._translate_slang(cleaned_text)
-                    if was_slang:
-                        logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
-                        return slang_translated
-
                     # Detect language if not provided
                     if not source_language:
                         try:

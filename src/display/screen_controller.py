@@ -248,6 +248,21 @@ class ScreenController:
         """Set the screen brightness level (0-100)."""
         self.display.set_brightness(level)
             
+    def _prune_expired(self, now: datetime) -> List[DisplayMessage]:
+        """Drop expired messages and return a snapshot of the remainder.
+
+        Expiry is per-message: any message created with a positive timeout
+        (e.g. voice ``clear_after``) gets an expiry even when the
+        controller-wide default is 0 ("keep chat forever"); messages without
+        an expiry stay until pushed out by newer ones.
+        """
+        with self._active_messages_lock:
+            self.active_messages = [
+                msg for msg in self.active_messages
+                if msg.expiry is None or msg.expiry > now
+            ]
+            return list(self.active_messages)
+
     def _display_loop(self):
         """Main display update loop."""
         while self.running:
@@ -265,16 +280,8 @@ class ScreenController:
             
         now = datetime.now()
         
-        # Get a copy of messages under lock for thread safety
-        with self._active_messages_lock:
-            # Remove expired messages if timeout is enabled
-            if self.message_timeout > 0:
-                self.active_messages = [
-                    msg for msg in self.active_messages
-                    if msg.expiry and msg.expiry > now
-                ]
-            # Make a copy to avoid holding lock during rendering
-            messages_to_display = list(self.active_messages)
+        # Prune expired messages, then copy under lock for rendering.
+        messages_to_display = self._prune_expired(now)
         
         # Clear buffer using display library
         self.display.clear()
