@@ -8,6 +8,21 @@ This plan supersedes `plans/improvement-suggestions.md` (an earlier pass whose c
 
 ---
 
+## User-reported issues (2026-07-10)
+
+Three reports from real use, triaged against the code:
+
+**A. "Sometimes the app exits and closes with no errors."**
+Diagnosis: the GUI is a windowed PyInstaller build (`Left4Translate-gui.spec:133`, `console=False`) and the codebase installs **no `sys.excepthook`, no `threading.excepthook`, and no `faulthandler`** — so any uncaught Python exception on a background thread, and any native fault (Qt DLLs, PortAudio, the pynput Win32 mouse hook, pyserial), terminates the process with nothing shown anywhere. `StreamTee` mirrors stderr into the Logs tab widget only — tracebacks never reach `logs/app.log`, and the tab dies with the process. On top of that, two code paths make crashes *likelier*: the close/stop path blocks the GUI thread ("Not Responding" → Windows or the user kills it, which looks identical to a silent exit), and a timed-out stop leaks a live engine whose duplicated global mouse hook / file watcher / audio stream can destabilize a second start. → **Phase 1 items 21–24** (new).
+
+**B. "The scroll wheel changes settings values too easily — even hovering without focus."**
+Diagnosis: Qt default behavior. `QSpinBox` and `QComboBox` accept wheel events on hover (`Qt.WheelFocus`), so scrolling the Settings page silently edits whatever field the cursor crosses — baud rate, brightness, cache size. → **Phase 1 item 25** (new; it's a data-corrupting UX bug, not polish).
+
+**C. "Some settings need comboboxes rather than typed values."**
+Already planned as the Phase 2 "Settings tab" block (COM port, microphone, languages, trigger button as dropdowns) — now **confirmed by user request and pulled forward into milestone M3**.
+
+---
+
 ## Phase 0 — Safety net first (CI + regression tests)
 
 Do this before touching bugs, so every later fix lands with proof.
@@ -68,7 +83,7 @@ Do this before touching bugs, so every later fix lands with proof.
     `src/audio/voice_recorder.py:109` — the constructor records a 2-second test clip synchronously. In the GUI this delays every engine start; it also fires on `update_config`. Make it lazy (first use), move it off the construction path, or make it an explicit "Test mic" action in the Voice tab.
 
 14. **GUI freezes up to ~5s on Stop / quit.**
-    `gui/engine_controller.py:85` joins the engine thread (up to 4s) on the GUI thread, and the engine's main loop (`src/main.py:357`) polls `running` at 1s granularity. Use an `threading.Event` with a short wait in the engine loop, and stop the engine from a worker (or `QTimer`-polled join) so the window never blocks.
+    `gui/engine_controller.py:85` joins the engine thread (up to 4s) on the GUI thread, and the engine's main loop (`src/main.py:357`) polls `running` at 1s granularity. Folded into item 22 below — the freeze is also a likely cause of the reported "silent exits" (frozen window gets killed).
 
 15. **`VoiceRecorder.update_config` always thinks the device changed.**
     `voice_recorder.py:377` — `_find_device()` rewrites `self.device` from the configured *name* to an *index*, so the next `update_config(device="default")` compares int to str and restarts recording needlessly. Keep the configured name and resolved index in separate fields.
@@ -88,6 +103,28 @@ Do this before touching bugs, so every later fix lands with proof.
 20. **Version drift.**
     README title says v1.2.7, the badge says 1.2.6 (`README.md:7`), and `__version__` lives in `src/main.py:16` independent of `pyproject.toml`. Single-source the version (read from `importlib.metadata` or one constants module) and let bump-my-version touch one place.
 
+### User-reported (2026-07-10) — silent exits and settings-form input
+
+21. **No crash reporting at all — silent exits are by construction.** *(root cause of report A)*
+    Nothing installs `sys.excepthook`, `threading.excepthook`, `faulthandler`, or a Qt message handler, and the GUI exe has no console. Fix, in `gui/app.py` at startup:
+    - `faulthandler.enable(open(logs/crash.log, "a"))` — captures native faults (Qt, PortAudio, pynput hook, pyserial) with a Python-level stack.
+    - `sys.excepthook` + `threading.excepthook` → log the traceback to `logs/app.log`, and (GUI thread only, via a queued signal) show a "Left4Translate hit an unexpected error" dialog instead of vanishing.
+    - `qInstallMessageHandler` → route Qt warnings/fatals into `logging`.
+    - Point `StreamTee` at the log file as well as the Logs tab, so stderr output survives the process.
+    After this lands, any remaining crash stops being "no errors" and becomes a stack trace in `logs/crash.log` we can actually fix.
+
+22. **Close/stop blocks the GUI thread → "Not Responding" → killed app looks like a silent exit.** *(contributor to report A; supersedes the wording of item 14)*
+    `MainWindow.closeEvent` (`gui/main_window.py:301`) and the tray Quit path call `EngineController.stop()`, which joins the engine thread for up to 4s (`gui/engine_controller.py:85`) while the engine itself takes up to 1s to notice (`src/main.py:357-358`) plus screen/reader teardown. A user (or Windows) killing the frozen window is indistinguishable from a crash. Fix: event-based engine loop (`threading.Event.wait()`), and make quit asynchronous — hide the window immediately, stop the engine on a worker, exit the app when the thread confirms (with a hard deadline).
+
+23. **Timed-out stop leaks a live engine; the next Start doubles global native hooks.** *(contributor to report A)*
+    `EngineController.stop()` nulls `_thread`/`_engine` even when the 4s join times out — the old engine keeps running with its pynput **global mouse hook**, watchdog observer, serial port, and audio stream. `start()` then happily builds a second engine: two low-level Win32 mouse hooks and duplicated native resources are a classic hard-crash recipe. Fix: refuse to start while the old thread is alive (surface "still stopping…"), keep the reference until the thread actually exits.
+
+24. **Blocking I/O inside the PortAudio realtime callback.** *(contributor to report A)*
+    `VoiceRecorder._audio_callback` (`src/audio/voice_recorder.py:308-329`) does numpy math and synchronous `logger.info` file writes inside the audio callback — explicitly warned against by sounddevice; can glitch or abort the stream host-side. Fix: callback only copies the buffer; level computation/logging move to the consumer thread (which also gives the Voice tab its live meter, Phase 2).
+
+25. **Scroll wheel edits settings on hover without focus.** *(report B)*
+    Every `QSpinBox`/`QComboBox` in the Settings form (`gui/settings_tab.py:213-231`) — and the header mode combo — accepts wheel events while merely hovered, so scrolling the page mutates values silently; combined with Save, wrong values land in `config.json` unnoticed. Fix: shared `NoScrollSpinBox`/`NoScrollComboBox` subclasses (or one event filter) in `gui/widgets.py`: `Qt.StrongFocus` + ignore wheel events unless the widget has focus. Use them everywhere in the Settings tab and header.
+
 ---
 
 ## Phase 2 — Work better (behavior improvements)
@@ -99,11 +136,12 @@ Do this before touching bugs, so every later fix lands with proof.
 - **Friendly startup errors**: `setup_logging()` (`src/main.py:30`) reads config.json before the FileNotFoundError guard — a missing config crashes with a traceback before the helpful "copy config.sample.json" message can print. Reorder.
 - **Single-instance guard** for the GUI (a second launch focuses the existing window instead of fighting over the serial port and log file).
 
-**Settings tab (biggest usability win)**
+**Settings tab (biggest usability win — comboboxes explicitly requested by user, report C)**
 - **COM port dropdown** via `serial.tools.list_ports` (with refresh button) instead of a free-text field.
 - **Microphone dropdown** via `sounddevice.query_devices()` instead of typing a device name.
-- **Language dropdowns** (common Google Translate codes with names) for target/voice/speech languages.
-- **Trigger-button dropdown** (left/right/middle/button4/button5) instead of free text.
+- **Language dropdowns** (common Google Translate codes with names, editable for exotic codes) for `translation.targetLanguage`, `voice_translation.translation.target_language`, and `voice_translation.speech_to_text.language`.
+- **Trigger-button dropdown** — exactly five valid values exist (`left`/`right`/`middle`/`button4`/`button5`, see `src/input/mouse_handler.py:42-50`); free text just invites typos that silently fall back to button4.
+- **Clipboard format dropdown** (`translated`/`original`/`both`) and **speech model dropdown** (`default`/`command_and_search`/`phone_call`/`video`) — both are closed sets today typed as free text.
 - **Validate + Test buttons**: "Test translation" (one API round-trip), "Test screen" (connect + splash), "Test mic" (level meter for 2s) — turning the current log-spelunking diagnostics into one-click checks.
 - **Apply on save**: offer "Restart engine now?" when saving while running, instead of the current passive "Stop and Start to apply" hint.
 
@@ -148,10 +186,10 @@ Do this before touching bugs, so every later fix lands with proof.
 
 | Milestone | Contents | Outcome |
 |---|---|---|
-| **M1 — Safety net** | Phase 0 (CI, test consolidation, ruff) | Every later change is gated by tests |
-| **M2 — Bug-free core** | Phase 1 items 1–12 (critical + high), each with a regression test | The advertised features actually work: voice target language, short slang, log truncation, message expiry, config safety, thread safety |
-| **M3 — Paper cuts** | Phase 1 items 13–20 + Phase 2 engine/voice items | No startup stalls, no UI freezes, half the API quota |
-| **M4 — Settings UX** | Phase 2 settings-tab work (dropdowns, test buttons) | Setup goes from "read the README and logs" to point-and-click |
+| **M1 — Safety net** | Phase 0 (CI, tests, ruff) **+ item 21 (crash reporting) + item 25 (wheel guard)** | Every later change is gated by tests; the next "silent exit" leaves a stack trace in `logs/crash.log`; scrolling Settings can no longer corrupt values. Item 21 moves first deliberately — it converts the unreproducible report A into actionable crash logs while the rest of the work proceeds. |
+| **M2 — Bug-free core** | Phase 1 items 1–12 (critical + high) **+ items 22–24 (stop-path freeze, double-start leak, audio-callback I/O)**, each with a regression test | The advertised features actually work, and the known crash/freeze contributors are gone |
+| **M3 — Settings UX** | Phase 2 settings-tab work (dropdowns per report C, test buttons) | Setup goes from "read the README and logs" to point-and-click |
+| **M4 — Paper cuts** | Phase 1 items 13–20 + Phase 2 engine/voice/overlay items | No startup stalls, half the API quota, live mic meter |
 | **M5 — Visual pass** | Phase 3 + screenshot/docs refresh | Consistent look in both themes, polished overlay |
 | **M6 — Structure** | Phase 4 | Maintainable for the next round |
 
