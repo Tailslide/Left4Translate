@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from typing import Any, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Signal
@@ -103,6 +104,7 @@ class SettingsTab(QWidget):
         self._store = store
         self._raw: Dict[str, Any] = {}
         self._widgets: Dict[str, QWidget] = {}
+        self._load_failed = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -255,10 +257,10 @@ class SettingsTab(QWidget):
         reload_btn = QPushButton("Reload")
         reload_btn.clicked.connect(self.reload)
         row.addWidget(reload_btn)
-        save_btn = QPushButton("Save")
-        save_btn.setObjectName("PrimaryButton")
-        save_btn.clicked.connect(self.save)
-        row.addWidget(save_btn)
+        self._save_btn = QPushButton("Save")
+        self._save_btn.setObjectName("PrimaryButton")
+        self._save_btn.clicked.connect(self.save)
+        row.addWidget(self._save_btn)
         return bar
 
     # ---- Helpers --------------------------------------------------------
@@ -285,6 +287,8 @@ class SettingsTab(QWidget):
     def reload(self) -> None:
         """Read ``config.json`` from disk into the form (best-effort)."""
         self._path_label.setText(self._config_path)
+        self._load_failed = False
+        self._save_btn.setEnabled(True)
         try:
             with open(self._config_path, "r", encoding="utf-8") as fh:
                 self._raw = json.load(fh)
@@ -292,9 +296,22 @@ class SettingsTab(QWidget):
             self._raw = {}
             self.status_message.emit("No config.json yet — fill in fields and Save to create it.")
         except (json.JSONDecodeError, OSError) as exc:
+            # Saving now would rewrite the file with only the form's fields,
+            # destroying everything else (messageFormat regex, logging, ...).
+            # Block Save until the file parses again.
             self._raw = {}
-            self.status_message.emit(f"Could not read config.json: {exc}")
+            self._load_failed = True
+            self._save_btn.setEnabled(False)
+            self._save_btn.setToolTip(
+                "Save is disabled: config.json could not be parsed. Fix the "
+                "file (or restore config.json.bak) and press Reload."
+            )
+            self._path_label.setText(f"⚠ {self._config_path} — unreadable: {exc}")
+            self.status_message.emit(
+                f"config.json could not be parsed — Save disabled to protect the file: {exc}"
+            )
             return
+        self._save_btn.setToolTip("")
 
         for path, kind in _FIELDS:
             widget = self._widgets.get(path)
@@ -309,6 +326,12 @@ class SettingsTab(QWidget):
 
     def save(self) -> None:
         """Collect the form into ``config.json``, preserving untouched keys."""
+        if self._load_failed:
+            self.status_message.emit(
+                "Not saving: config.json could not be parsed. Fix the file and press Reload first."
+            )
+            return
+
         for path, kind in _FIELDS:
             widget = self._widgets.get(path)
             if widget is None:
@@ -317,6 +340,9 @@ class SettingsTab(QWidget):
 
         try:
             os.makedirs(os.path.dirname(os.path.abspath(self._config_path)), exist_ok=True)
+            # Keep a one-deep backup so a bad save is always recoverable.
+            if os.path.exists(self._config_path):
+                shutil.copy2(self._config_path, self._config_path + ".bak")
             with open(self._config_path, "w", encoding="utf-8") as fh:
                 json.dump(self._raw, fh, indent=2, ensure_ascii=False)
         except OSError as exc:
