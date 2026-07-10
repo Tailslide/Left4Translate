@@ -126,6 +126,10 @@ class LogsTab(QWidget):
         handler.setFormatter(
             logging.Formatter("%(asctime)s  %(levelname)-7s %(name)s: %(message)s", datefmt="%H:%M:%S")
         )
+        # console.* records are teed stdout/stderr lines the tab already shows
+        # directly (see _on_stdout_line); filter them here so routing them to
+        # the log file doesn't double them up in the view.
+        handler.addFilter(lambda record: not record.name.startswith("console."))
         handler.emitted.connect(self._on_record)
         logger.addHandler(handler)
         self._handler = handler
@@ -172,10 +176,16 @@ class LogsTab(QWidget):
     def _on_stdout_line(self, line: str) -> None:
         if line.strip():
             self._append(logging.INFO, line)
+            # Persist to logs/app.log via the root file handler, so raw print
+            # output survives the process (crash forensics).
+            logging.getLogger("console.stdout").info("%s", line)
 
     def _on_stderr_line(self, line: str) -> None:
         if line.strip():
             self._append(logging.ERROR, line)
+            # Tracebacks and native-library noise land in stderr; without this
+            # they die with the window and "silent exits" stay silent.
+            logging.getLogger("console.stderr").error("%s", line)
 
     def _append(self, levelno: int, message: str) -> None:
         if levelno < self._min_level:

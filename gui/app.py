@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
+from gui import crash_guard
 from gui.main_window import MainWindow
 from gui.settings_store import SettingsStore
 from gui.theme import apply_theme
@@ -72,14 +73,31 @@ def _setup_logging(base_dir: str) -> None:
         root.addHandler(handler)
 
 
+def _show_crash_dialog(summary: str) -> None:
+    """Queued slot for crash_guard.reporter.crashed — runs on the GUI thread."""
+    try:
+        QMessageBox.critical(
+            None,
+            "Left4Translate — unexpected error",
+            "Left4Translate hit an unexpected error and may be unstable.\n\n"
+            f"{summary}\n\n"
+            "Details were written to logs/app.log (and logs/crash.log for "
+            "native faults). Please include them if you report this.",
+        )
+    except Exception:  # never let the reporter itself crash the app
+        logging.getLogger(__name__).exception("Failed to show crash dialog")
+
+
 def build_application(argv: Optional[Sequence[str]] = None) -> tuple[QApplication, MainWindow]:
     """Construct the QApplication and main window without entering the loop."""
     base = _base_dir()
     _setup_logging(base)
+    crash_guard.install(Path(base) / "logs")
 
     app = QApplication.instance() or QApplication(
         list(argv) if argv is not None else sys.argv
     )
+    crash_guard.reporter.crashed.connect(_show_crash_dialog)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
     app.setQuitOnLastWindowClosed(False)  # keep running in the tray
