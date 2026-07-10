@@ -1,40 +1,46 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from cachetools import LRUCache
 import requests
 from datetime import datetime
+import threading
 import time
 import logging
 import re
 import html
 
+# Network timeout for every Translation API call. Without one, a stalled
+# connection blocks the calling thread (chat reader / voice worker) forever.
+REQUEST_TIMEOUT_SECONDS = 10
+
 class RateLimiter:
-    """Simple token bucket rate limiter."""
-    
+    """Simple token-bucket rate limiter. Thread-safe: the chat reader and
+    voice worker threads share one instance."""
+
     def __init__(self, rate_limit_per_minute: int):
         self.rate_limit = rate_limit_per_minute
         self.tokens = rate_limit_per_minute
         self.last_update = datetime.now()
-        
+        self._lock = threading.Lock()
+
     def acquire(self) -> bool:
         """Attempt to acquire a token. Returns True if successful."""
-        now = datetime.now()
-        time_passed = now - self.last_update
-        
-        # Replenish tokens based on time passed
-        old_tokens = self.tokens
-        self.tokens = min(
-            self.rate_limit,
-            self.tokens + (time_passed.total_seconds() / 60.0) * self.rate_limit
-        )
-        self.last_update = now
-        
-        if self.tokens >= 1:
-            self.tokens -= 1
-            logging.debug(f"Rate limiter: Token acquired. Tokens before/after: {old_tokens:.2f}/{self.tokens:.2f}")
-            return True
-            
-        logging.warning(f"Rate limiter: No tokens available. Current tokens: {self.tokens:.2f}")
-        return False
+        with self._lock:
+            now = datetime.now()
+            time_passed = now - self.last_update
+
+            # Replenish tokens based on time passed
+            self.tokens = min(
+                self.rate_limit,
+                self.tokens + (time_passed.total_seconds() / 60.0) * self.rate_limit
+            )
+            self.last_update = now
+
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return True
+
+            logging.debug(f"Rate limiter: no tokens available ({self.tokens:.2f})")
+            return False
 
 def is_undefined_language_error(e: requests.exceptions.HTTPError) -> bool:
     """Check if the error is due to undefined language."""
@@ -172,8 +178,15 @@ class TranslationService:
         self.headers = {'Content-Type': 'application/json'}
         self.target_language = target_language
         self.cache = LRUCache(maxsize=cache_size)
+        # LRUCache is not thread-safe; the chat reader and voice worker
+        # threads share this service, so guard all cache access.
+        self._cache_lock = threading.Lock()
         self.rate_limiter = RateLimiter(rate_limit_per_minute)
         self.retry_attempts = retry_attempts
+        # Longest a caller may block waiting for a rate-limit token. Beyond
+        # this we degrade gracefully (original text) instead of stalling the
+        # reader/voice thread indefinitely.
+        self.rate_limit_wait_seconds = 5.0
         
     def _clean_text(self, text: str) -> str:
         """Remove color codes and other special characters."""
@@ -266,16 +279,29 @@ class TranslationService:
         source_language: Optional[str] = None,
         target_language: Optional[str] = None
     ) -> str:
+        """Translate ``text``; see :meth:`translate_with_detection`."""
+        translated, _ = self.translate_with_detection(
+            text, source_language=source_language, target_language=target_language
+        )
+        return translated
+
+    def translate_with_detection(
+        self,
+        text: str,
+        source_language: Optional[str] = None,
+        target_language: Optional[str] = None
+    ) -> Tuple[str, Optional[str]]:
         """
-        Translate text to target language.
-        
-        Args:
-            text: Text to translate
-            source_language: Source language code (optional)
-            target_language: Target language code (optional, defaults to self.target_language)
-            
+        Translate text to the target language in a single API call.
+
+        When ``source_language`` is omitted the Translation API auto-detects it
+        server-side and reports ``detectedSourceLanguage`` in the same response,
+        so no separate /detect round-trip is needed.
+
         Returns:
-            Translated text
+            (translated_text, source_language) — the source is the caller's,
+            the local heuristic's, or the API-detected base code; ``None`` when
+            unknown (untranslatable content, rate-limit fallback).
         """
         # Use provided target language or fall back to the default
         target_lang = target_language or self.target_language
@@ -288,116 +314,111 @@ class TranslationService:
         slang_translated, was_slang = self._translate_slang(cleaned_text)
         if was_slang:
             logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
-            return slang_translated
+            return slang_translated, 'es'
 
         # Skip translation for untranslatable content
         if is_untranslatable_content(cleaned_text):
             logging.debug(f"Skipping translation for untranslatable content: '{text}'")
-            return text
-            
-        # Check cache first - strip script part from source language if present
-        source_lang_base = source_language.split('-')[0] if source_language else 'auto'
-        cache_key = f"{source_lang_base}:{target_lang}:{cleaned_text}"
-        if cache_key in self.cache:
-            return self.cache[cache_key]
-            
-        # Apply rate limiting
+            return text, None
+
+        # Resolve the source language: caller-provided, else the cheap local
+        # Spanish-indicator heuristic; else let the API auto-detect.
+        source_base = source_language.split('-')[0] if source_language else None
+        if source_base is None:
+            hint = self._preprocess_text(cleaned_text)
+            source_base = hint or None
+        if source_base and source_base == target_lang:
+            return text, source_base
+
+        cache_key = f"{source_base or 'auto'}:{target_lang}:{cleaned_text}"
+        with self._cache_lock:
+            cached = self.cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        deadline = time.monotonic() + self.rate_limit_wait_seconds
         attempts = 0
-        while attempts < self.retry_attempts:
-            if self.rate_limiter.acquire():
-                try:
-                    # Detect language if not provided
-                    if not source_language:
-                        try:
-                            detected = self.detect_language(cleaned_text)
-                            # Strip script part of language code (e.g., 'es-Latn' -> 'es')
-                            base_language = detected.split('-')[0]
-                            
-                            # Skip translation if already in target language or undefined
-                            if base_language == target_lang or base_language == 'und':
-                                logging.debug(f"Skipping translation for language: {detected}")
-                                return text  # Return original text, not cleaned
-                            
-                            source_language = base_language  # Use base language code for translation
-                        except requests.exceptions.HTTPError as e:
-                            # If language detection fails with 400 error (undefined language)
-                            if is_undefined_language_error(e):
-                                logging.debug(f"Language detection failed, text may be untranslatable: '{text}'")
-                                return text
-                            raise  # Re-raise other HTTP errors
-                    
-                    # Perform translation
-                    data = {
-                        'q': cleaned_text,
-                        'target': target_lang
-                    }
-                    if source_language:
-                        # Strip script part from source language if present
-                        data['source'] = source_language.split('-')[0]
-
-                    logging.debug("Translation request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
-                    logging.debug(f"Text length: {len(text)} characters")
-                    logging.debug(f"Attempt {attempts + 1} of {self.retry_attempts}")
-
-                    response = requests.post(
-                        self.base_url,
-                        params={'key': self.api_key},
-                        json=data,
-                        headers=self.headers
+        while True:
+            if not self.rate_limiter.acquire():
+                if time.monotonic() >= deadline:
+                    # Degrade gracefully: showing the original text beats
+                    # stalling the reader/voice thread behind one message.
+                    logging.warning(
+                        "Rate limit wait budget exhausted; showing original text"
                     )
+                    return text, None
+                time.sleep(0.1)
+                continue
 
-                    if response.status_code != 200:
-                        logging.error(f"Translation API error - Status: {response.status_code}")
-                        logging.error(f"Response content: {response.text}")
-                        logging.error(f"Request URL: {response.url}")
-                        response.raise_for_status()
+            try:
+                data = {'q': cleaned_text, 'target': target_lang}
+                if source_base:
+                    data['source'] = source_base
 
-                    result = response.json()
-                    
-                    translated_text = result['data']['translations'][0]['translatedText']
-                    # Decode HTML entities (like &#39; to ')
-                    decoded_text = html.unescape(translated_text)
-                    
-                    # Check if any words in the original text match our slang dictionary
-                    # and weren't translated by Google Translate
-                    original_words = cleaned_text.split()
-                    translated_words = decoded_text.split()
-                    
-                    # Only substitute slang if Google Translate didn't change the word
-                    slang_dict = self._get_slang_translations()
-                    for i, (orig, trans) in enumerate(zip(original_words, translated_words, strict=False)):
-                        if orig.lower() == trans.lower() and orig.lower() in slang_dict:
-                            translated_words[i] = slang_dict[orig.lower()]
-                    
-                    final_text = ' '.join(translated_words)
-                    logging.debug(f"Successfully translated text. Length: {len(final_text)} characters")
-                    
-                    # Cache the final result
-                    self.cache[cache_key] = final_text
-                    
-                    return final_text
-                    
-                except requests.exceptions.HTTPError as e:
-                    # If it's an undefined language error, return original text immediately
-                    if is_undefined_language_error(e):
-                        logging.debug(f"Translation failed due to undefined language, returning original: '{text}'")
-                        return text
-                        
-                    attempts += 1
-                    logging.error(f"HTTP Error on attempt {attempts}: {str(e)}")
-                    if attempts >= self.retry_attempts:
-                        raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
-                    time.sleep(1)  # Wait before retry
-                except Exception as e:
-                    attempts += 1
-                    logging.error(f"Unexpected error on attempt {attempts}: {str(e)}")
-                    if attempts >= self.retry_attempts:
-                        raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
-                    time.sleep(1)  # Wait before retry
-            else:
-                time.sleep(0.1)  # Wait for rate limit
-                
-        raise Exception("Failed to acquire rate limit token")
+                logging.debug(f"Translation request: target={target_lang} source={source_base or 'auto'} len={len(text)}")
+
+                response = requests.post(
+                    self.base_url,
+                    params={'key': self.api_key},
+                    json=data,
+                    headers=self.headers,
+                    timeout=REQUEST_TIMEOUT_SECONDS,
+                )
+                if response.status_code != 200:
+                    logging.error(f"Translation API error - Status: {response.status_code}")
+                    logging.error(f"Response content: {response.text}")
+                    response.raise_for_status()
+
+                payload = response.json()['data']['translations'][0]
+                decoded_text = html.unescape(payload['translatedText'])
+                detected = payload.get('detectedSourceLanguage') or source_base
+                detected_base = detected.split('-')[0] if detected else None
+
+                if detected_base in (target_lang, 'und'):
+                    # Already in the target language (or undetectable):
+                    # keep the original text.
+                    result: Tuple[str, Optional[str]] = (text, detected_base)
+                else:
+                    result = (self._apply_slang_postpass(cleaned_text, decoded_text), detected_base)
+
+                with self._cache_lock:
+                    self.cache[cache_key] = result
+                return result
+
+            except requests.exceptions.HTTPError as e:
+                # If it's an undefined language error, return original text immediately
+                if is_undefined_language_error(e):
+                    logging.debug(f"Undefined source language, returning original: '{text}'")
+                    return text, None
+
+                attempts += 1
+                logging.error(f"HTTP Error on attempt {attempts}: {str(e)}")
+                if attempts >= self.retry_attempts:
+                    raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
+                time.sleep(1)  # Wait before retry
+            except Exception as e:
+                attempts += 1
+                logging.error(f"Unexpected error on attempt {attempts}: {str(e)}")
+                if attempts >= self.retry_attempts:
+                    raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
+                time.sleep(1)  # Wait before retry
+
+    def _apply_slang_postpass(self, original: str, translated: str) -> str:
+        """Replace slang tokens Google left unchanged.
+
+        A token qualifies only if it appears (case-insensitively) in both the
+        original and the translated text — i.e. Google passed it through. This
+        is position-independent, so differing word counts between source and
+        translation can't misalign the substitution.
+        """
+        slang_dict = self._get_slang_translations()
+        original_tokens = {w.lower() for w in original.split()}
+        out = translated.split()
+        for i, word in enumerate(out):
+            lowered = word.lower()
+            if lowered in slang_dict and lowered in original_tokens:
+                out[i] = slang_dict[lowered]
+        return ' '.join(out)
         
     def detect_language(self, text: str) -> str:
         """
@@ -427,16 +448,20 @@ class TranslationService:
             logging.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
             logging.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
 
-            # Apply rate limiting before making the API call
+            # Apply rate limiting before making the API call, with a
+            # deadline so a drained bucket can't stall the caller forever.
+            wait_deadline = time.monotonic() + self.rate_limit_wait_seconds
             while not self.rate_limiter.acquire():
-                logging.warning("Rate limit hit during language detection, waiting...")
-                time.sleep(0.1) # Wait briefly for token replenishment
+                if time.monotonic() >= wait_deadline:
+                    raise Exception("Rate limit wait budget exhausted during language detection")
+                time.sleep(0.1)  # Wait briefly for token replenishment
 
             response = requests.post(
                 f"{self.base_url}/detect",  # This is a different endpoint for detection
                 params={'key': self.api_key},
                 json=data,
-                headers=self.headers
+                headers=self.headers,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
 
             if response.status_code != 200:
@@ -460,12 +485,14 @@ class TranslationService:
             
     def clear_cache(self):
         """Clear the translation cache."""
-        self.cache.clear()
-        
+        with self._cache_lock:
+            self.cache.clear()
+
     def get_cache_stats(self) -> Dict[str, int]:
         """Get cache statistics."""
-        return {
-            "size": len(self.cache),
-            "maxsize": self.cache.maxsize,
-            "currsize": self.cache.currsize
-        }
+        with self._cache_lock:
+            return {
+                "size": len(self.cache),
+                "maxsize": self.cache.maxsize,
+                "currsize": self.cache.currsize
+            }

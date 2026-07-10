@@ -243,22 +243,15 @@ class Left4Translate:
                 return
             
             self.logger.info(f"New message from {player_name}: {chat_message}")
-            
+
             try:
-                # Detect and translate message
-                source_lang = self.translator.detect_language(chat_message)
-                
-                # Only translate if not already in target language
-                if source_lang != self.config_manager.get_translation_config().target_language:
-                    translated = self.translator.translate(
-                        chat_message,
-                        source_language=source_lang
-                    )
-                else:
-                    translated = chat_message
+                # One API round-trip: the translate endpoint auto-detects the
+                # source language and skips translation when the text is
+                # already in the target language.
+                translated, source_lang = self.translator.translate_with_detection(chat_message)
             except Exception as e:
                 self.logger.error(f"Translation error: {e}")
-                translated = chat_message  # Use original message if translation fails
+                translated, source_lang = chat_message, None  # Show original on failure
             
             # Display message on the Turing screen (only when the hardware screen
             # is enabled). This is best-effort: a screen error must never stop the
@@ -286,7 +279,7 @@ class Left4Translate:
                 "original": chat_message,
                 "translated": translated,
                 "team": team_type,
-                "source_language": locals().get("source_lang"),
+                "source_language": source_lang,
             })
 
         except Exception as e:

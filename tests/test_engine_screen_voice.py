@@ -60,6 +60,9 @@ class _FakeTranslationService:
     def translate(self, text, source_language=None):
         return f"EN:{text}"
 
+    def translate_with_detection(self, text, source_language=None, target_language=None):
+        return f"EN:{text}", "es"
+
 
 class _FakeVoiceManager:
     instances = 0
