@@ -28,10 +28,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
+
+from gui.widgets import NoScrollComboBox, NoScrollSpinBox
 
 from gui.settings_store import (
     MODES,
@@ -161,14 +162,14 @@ class SettingsTab(QWidget):
         form.setContentsMargins(0, 10, 0, 0)
         form.setSpacing(8)
 
-        self._theme_combo = QComboBox()
+        self._theme_combo = NoScrollComboBox()
         for label, value in (("System", THEME_SYSTEM), ("Dark", THEME_DARK), ("Light", THEME_LIGHT)):
             self._theme_combo.addItem(label, value)
         self._select_data(self._theme_combo, self._store.theme())
         self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         form.addRow(self._cap("Theme"), self._theme_combo)
 
-        self._mode_combo = QComboBox()
+        self._mode_combo = NoScrollComboBox()
         for mode in MODES:
             self._mode_combo.addItem(mode.capitalize(), mode)
         self._select_data(self._mode_combo, self._store.mode())
@@ -219,7 +220,7 @@ class SettingsTab(QWidget):
             edit.setPlaceholderText("Google Cloud Translation API key")
             return edit
         if kind.startswith("int"):
-            spin = QSpinBox()
+            spin = NoScrollSpinBox()
             parts = kind.split(":")
             lo = int(parts[1]) if len(parts) > 1 else 0
             hi = int(parts[2]) if len(parts) > 2 else 1_000_000

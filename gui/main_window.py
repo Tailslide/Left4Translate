@@ -8,7 +8,6 @@ from typing import Optional
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -28,7 +27,7 @@ from gui.settings_tab import SettingsTab
 from gui.theme import apply_theme
 from gui.tray import TrayIcon, is_tray_available
 from gui.voice_tab import VoiceTab
-from gui.widgets import StatusBank
+from gui.widgets import NoScrollComboBox, StatusBank
 
 _logger = logging.getLogger("left4translate.gui")
 
@@ -86,7 +85,7 @@ class MainWindow(QMainWindow):
         title.setObjectName("AppTitle")
         row.addWidget(title)
 
-        self._mode_combo = QComboBox()
+        self._mode_combo = NoScrollComboBox()
         for mode in MODES:
             self._mode_combo.addItem(mode.capitalize(), mode)
         idx = self._mode_combo.findData(self._store.mode())
