@@ -1,7 +1,22 @@
 # Left4Translate — Improvement Plan
 
-**Date:** 2026-07-09
+**Date:** 2026-07-09 · **Executed:** 2026-07-10
 **Goal:** Make the app look better, work better, and wind up bug free.
+
+> **Status: implemented.** Every milestone (M1–M6) has been executed on this
+> branch; see `CHANGELOG.md` (Unreleased) for the user-facing summary and the
+> commit history for per-item details. All 25 numbered bugs are fixed with
+> regression tests (124 tests, plus ruff, running in the new CI workflow).
+> Deliberately deferred, in case a later pass wants them:
+> - Tab icons (needs proper icon assets; Qt's standard pixmaps look worse
+>   than no icons).
+> - Overlay message fade-out timer (the overlay gained font-size controls,
+>   click-through, and snap-to-edge instead).
+> - Clipboard restore-after-N-seconds option.
+> - mypy in CI (ruff landed; mypy adds little until annotations are tightened).
+> - `pip install -e .` entry points — would require repackaging the flat
+>   `src/` imports into a proper package, which PyInstaller specs and every
+>   import site depend on; too invasive for this pass.
 **Scope:** Full review of `src/` (engine), `gui/` (desktop app), config, tests, and CI. Every bug below was confirmed by reading the code, with file/line references so each item can be picked up independently.
 
 This plan supersedes `plans/improvement-suggestions.md` (an earlier pass whose completed items are already merged). Items still open from that document are folded in here.
