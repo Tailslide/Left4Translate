@@ -13,7 +13,7 @@ from translator.translation_service import TranslationService
 from display.screen_controller import ScreenController
 from audio.voice_translation_manager import VoiceTranslationManager
 
-__version__ = "1.2.7"  # Updated version with chat message display fix
+from version import __version__  # single-sourced; bumped in src/version.py
 
 
 def get_executable_dir():
@@ -70,9 +70,17 @@ def main():
     # Resolve config path before setting up logging
     exe_dir = get_executable_dir()
     config_path = resolve_config_path(args, exe_dir)
-    
-    # Set up logging first
-    setup_logging(config_path)
+
+    # Set up logging first. A missing/broken config must produce the friendly
+    # setup instructions, not a raw traceback from the logging bootstrap.
+    try:
+        setup_logging(config_path)
+    except (FileNotFoundError, ValueError, KeyError) as e:
+        print(f"\nCould not read configuration ({e}). Please:")
+        print("1. Copy config.sample.json to config.json")
+        print("2. Add your Google Cloud Translation API key")
+        print("3. Configure your screen settings")
+        sys.exit(1)
     
     # Run the application
     app = Left4Translate(config_path, args.mode)
@@ -170,13 +178,20 @@ class Left4Translate:
             trans_config = self.config_manager.get_translation_config()
             screen_config = self.config_manager.get_screen_config()
             
-            # Initialize translation service
+            # Initialize translation service. Slang overrides and the
+            # persistent cache live next to the config file.
+            config_dir = os.path.dirname(str(self.config_manager.config_path))
+            cache_file = None
+            if self.config_manager.get_setting("translation.persistCache", False):
+                cache_file = os.path.join(config_dir, "translation_cache.json")
             self.translator = TranslationService(
                 api_key=trans_config.api_key,
                 target_language=trans_config.target_language,
                 cache_size=trans_config.cache_size,
                 rate_limit_per_minute=trans_config.rate_limit_per_minute,
-                retry_attempts=trans_config.retry_attempts
+                retry_attempts=trans_config.retry_attempts,
+                slang_path=os.path.join(config_dir, "slang_es.json"),
+                cache_file=cache_file
             )
             
             # Whether the physical Turing Smart Screen is in use. When disabled,
@@ -192,7 +207,8 @@ class Left4Translate:
                 max_messages=screen_config.display.get("maxMessages", 5),
                 message_timeout=screen_config.display.get("messageTimeout", 10000),
                 margin=screen_config.display.get("layout", {}).get("margin", 5),
-                spacing=screen_config.display.get("layout", {}).get("spacing", 2)
+                spacing=screen_config.display.get("layout", {}).get("spacing", 2),
+                app_version=__version__
             )
             
             # Initialize chat message reader if mode is 'chat' or 'both'
@@ -379,6 +395,12 @@ class Left4Translate:
 
             if self.screen_enabled:
                 self.screen.disconnect()
+
+            # Persist the translation cache if enabled (translation.persistCache).
+            try:
+                self.translator.save_cache()
+            except Exception as e:
+                self.logger.debug(f"Cache save skipped: {e}")
 
             self.logger.info("Left4Translate stopped")
             self._emit_status("screen", "disconnected")

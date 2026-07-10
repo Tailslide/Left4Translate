@@ -252,7 +252,20 @@ class VoiceTranslationManager:
                 logger.warning("No audio data recorded - recording may have failed")
                 return
                 
-            logger.info(f"Recorded {len(audio_data)} audio samples ({len(audio_data)/self.voice_recorder.sample_rate:.2f} seconds)")
+            duration = len(audio_data) / self.voice_recorder.sample_rate
+            logger.info(f"Recorded {len(audio_data)} audio samples ({duration:.2f} seconds)")
+
+            # Accidental taps produce sub-300ms clips that only waste an API
+            # call; the synchronous recognize endpoint also rejects clips
+            # near a minute, so cap at 55s (keeping the most recent audio).
+            if duration < 0.3:
+                logger.info("Clip shorter than 0.3s - ignoring accidental tap")
+                self._emit_status("armed")
+                return
+            max_samples = int(55 * self.voice_recorder.sample_rate)
+            if len(audio_data) > max_samples:
+                logger.warning(f"Clip of {duration:.1f}s exceeds the 55s limit - keeping the last 55s")
+                audio_data = audio_data[-max_samples:]
             
             # Process in a separate thread to avoid blocking
             logger.info("Starting audio processing in separate thread")

@@ -4,7 +4,7 @@ Real-time chat and voice translation for Left 4 Dead 2, displaying translated me
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.2.6-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.7-blue.svg)](https://github.com/yourusername/Left4Translate)
 
 Available as both a **console app** and a **full Windows desktop GUI** (with a
 live translation feed, system-tray support, and an in-app config editor — see

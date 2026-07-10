@@ -149,16 +149,18 @@ class ConfigManager:
         )
         
     def get_setting(self, key: str, default: Optional[T] = None) -> T:
-        """Get a specific configuration setting."""
+        """Get a specific configuration setting by dotted path."""
         keys = key.split('.')
         value = self.config
-        
+
         for k in keys:
-            if isinstance(value, dict):
-                value = value.get(k, default)
+            if isinstance(value, dict) and k in value:
+                value = value[k]
             else:
+                # A missing intermediate key used to substitute the default
+                # and keep traversing *into* it, returning nonsense.
                 return default
-                
+
         return value if value is not None else default
         
     def get_config(self) -> Dict[str, Any]:

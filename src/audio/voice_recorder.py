@@ -37,7 +37,8 @@ class VoiceRecorder:
         """
         self.sample_rate = sample_rate
         self.channels = channels
-        self.device = device
+        self.device = device  # configured name ("default" or a substring)
+        self.device_index = None  # resolved sounddevice index
         self.on_data_callback = on_data_callback
         
         self.recording = False
@@ -55,30 +56,35 @@ class VoiceRecorder:
         logger.debug(f"VoiceRecorder initialized with sample_rate={sample_rate}, channels={channels}, device={self.device}")
     
     def _find_device(self) -> None:
-        """Find the specified audio device or use default."""
+        """Resolve the configured device *name* to a sounddevice index.
+
+        The configured name is kept in ``self.device`` (so config comparisons
+        keep working); the resolved index lives in ``self.device_index``.
+        No test recording happens here — the old constructor-time 2-second
+        mic probe blocked every engine start; level checks are now an
+        explicit action (Settings → Diagnostics → Test microphone).
+        """
         try:
             devices = sd.query_devices()
-            
+
             if self.device and self.device != "default":
                 # Try to find the device by name
                 for i, dev in enumerate(devices):
-                    if self.device.lower() in dev['name'].lower():
-                        self.device = i
+                    if str(self.device).lower() in dev['name'].lower():
+                        self.device_index = i
                         logger.info(f"Found device: {dev['name']} (index: {i})")
-                        self._check_microphone_volume()
                         return
-                
+
                 logger.warning(f"Device '{self.device}' not found. Using default input device.")
-            
+
             # Use default input device
-            self.device = sd.default.device[0]
-            default_device = devices[self.device]
-            logger.info(f"Using default input device: {default_device['name']} (index: {self.device})")
-            self._check_microphone_volume()
-            
+            self.device_index = sd.default.device[0]
+            default_device = devices[self.device_index]
+            logger.info(f"Using default input device: {default_device['name']} (index: {self.device_index})")
+
         except Exception as e:
             logger.error(f"Error finding audio device: {e}")
-            self.device = None
+            self.device_index = None
             
     def _check_microphone_volume(self) -> None:
         """Check microphone volume and provide guidance if it's too low."""
@@ -87,17 +93,9 @@ class VoiceRecorder:
             devices = sd.query_devices()
             device_info = None
             
-            if isinstance(self.device, int):
-                if 0 <= self.device < len(devices):
-                    device_info = devices[self.device]
-                    logger.info(f"Using device index {self.device}: {device_info['name']}")
-            else:
-                # Find device by name
-                for i, dev in enumerate(devices):
-                    if self.device.lower() in dev['name'].lower():
-                        device_info = dev
-                        logger.info(f"Found device by name: {dev['name']} (index: {i})")
-                        break
+            if isinstance(self.device_index, int) and 0 <= self.device_index < len(devices):
+                device_info = devices[self.device_index]
+                logger.info(f"Using device index {self.device_index}: {device_info['name']}")
             
             if device_info:
                 logger.info("Device details:")
@@ -118,7 +116,7 @@ class VoiceRecorder:
                 int(duration * sample_rate),
                 samplerate=sample_rate,
                 channels=channels,
-                device=self.device,
+                device=self.device_index,
                 dtype='float32'
             )
             sd.wait()  # Wait for recording to complete
@@ -188,9 +186,7 @@ class VoiceRecorder:
             if len(input_devices) > 1:
                 logger.info("Available alternative microphones:")
                 for i, (idx, device) in enumerate(input_devices):
-                    if isinstance(self.device, int) and idx == self.device:
-                        continue  # Skip current device
-                    if isinstance(self.device, str) and self.device.lower() in device['name'].lower():
+                    if idx == self.device_index:
                         continue  # Skip current device
                     logger.info(f"  {i+1}. {device['name']} (device index: {idx})")
                 
@@ -223,8 +219,8 @@ class VoiceRecorder:
             try:
                 # Get more detailed device info
                 devices = sd.query_devices()
-                if isinstance(self.device, int) and 0 <= self.device < len(devices):
-                    device_info = devices[self.device]
+                if isinstance(self.device_index, int) and 0 <= self.device_index < len(devices):
+                    device_info = devices[self.device_index]
                     logger.info(f"- Device name: {device_info['name']}")
                     logger.info(f"- Max input channels: {device_info['max_input_channels']}")
                     logger.info(f"- Default sample rate: {device_info['default_samplerate']}")
@@ -239,7 +235,7 @@ class VoiceRecorder:
             self.stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
-                device=self.device,
+                device=self.device_index,
                 callback=self._audio_callback
             )
             

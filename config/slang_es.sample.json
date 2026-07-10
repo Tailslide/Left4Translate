@@ -1,0 +1,5 @@
+{
+  "_comment": "Optional user slang overrides. Copy to config/slang_es.json; keys are lowercase source phrases, values are replacements. Entries here win over the built-in dictionary.",
+  "gg izi": "gg ez",
+  "khe": "what"
+}

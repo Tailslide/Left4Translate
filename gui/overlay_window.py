@@ -77,6 +77,8 @@ class OverlayWindow(QWidget):
         self._messages: Deque[str] = deque(maxlen=_MAX_MESSAGES)
         self._drag_offset: Optional[QPoint] = None
         self._opacity = self._store.overlay_opacity()
+        self._font_size = self._store.overlay_font_size()
+        self._click_through = False  # session-only; reset on every show
 
         self.setWindowTitle("Left4Translate Overlay")
         self.setWindowFlags(
@@ -148,18 +150,26 @@ class OverlayWindow(QWidget):
         row.addWidget(title)
         row.addStretch(1)
 
+        smaller = self._tool_button("A–", "Smaller text", self._decrease_font)
+        bigger = self._tool_button("A+", "Larger text", self._increase_font)
         less = self._tool_button("–", "Less opaque", self._decrease_opacity)
         more = self._tool_button("+", "More opaque", self._increase_opacity)
+        ghost = self._tool_button(
+            "▣",
+            "Click-through: clicks pass to the game (Windows). Hide and "
+            "re-show the overlay to interact with it again.",
+            self._enable_click_through,
+        )
         clear = self._tool_button("⌫", "Clear messages", self.clear)
         close = self._tool_button("✕", "Hide overlay", self.hide)
-        for btn in (less, more, clear, close):
+        for btn in (smaller, bigger, less, more, ghost, clear, close):
             row.addWidget(btn)
         return bar
 
     def _tool_button(self, text: str, tip: str, slot) -> QPushButton:
         btn = QPushButton(text, self)
         btn.setObjectName("OverlayToolButton")
-        btn.setFixedSize(20, 20)
+        btn.setFixedSize(26 if len(text) > 1 else 20, 20)
         btn.setToolTip(tip)
         btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -221,6 +231,34 @@ class OverlayWindow(QWidget):
             label = _MessageLabel(html, self._body)
             self._body_layout.insertWidget(0, label)
 
+    # ---- Font size ------------------------------------------------------
+
+    def _increase_font(self) -> None:
+        self._set_font_size(self._font_size + 1)
+
+    def _decrease_font(self) -> None:
+        self._set_font_size(self._font_size - 1)
+
+    def _set_font_size(self, value: int) -> None:
+        self._font_size = min(24, max(9, value))
+        self._store.set_overlay_font_size(self._font_size)
+        self._panel.setStyleSheet(self._panel_qss())
+
+    # ---- Click-through ---------------------------------------------------
+
+    def _enable_click_through(self) -> None:
+        """Let all mouse input fall through to the game (Windows).
+
+        Deliberately one-way and session-only: once the window ignores the
+        mouse its own buttons are unreachable, so the escape hatch is hiding
+        and re-showing the overlay (main-window Overlay button), which
+        resets the flag in showEvent.
+        """
+        if sys.platform != "win32":
+            return
+        self._click_through = True
+        self._apply_window_ex_style()
+
     # ---- Opacity --------------------------------------------------------
 
     def _apply_opacity(self) -> None:
@@ -253,7 +291,27 @@ class OverlayWindow(QWidget):
 
     def _bar_mouse_release(self, event) -> None:
         self._drag_offset = None
+        self._snap_to_edges()
         event.accept()
+
+    def _snap_to_edges(self, threshold: int = 20) -> None:
+        """Stick to a screen edge when released within ``threshold`` px."""
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        area = screen.availableGeometry()
+        geo = self.frameGeometry()
+        x, y = geo.x(), geo.y()
+        if abs(geo.left() - area.left()) <= threshold:
+            x = area.left()
+        elif abs(area.right() - geo.right()) <= threshold:
+            x = area.right() - geo.width() + 1
+        if abs(geo.top() - area.top()) <= threshold:
+            y = area.top()
+        elif abs(area.bottom() - geo.bottom()) <= threshold:
+            y = area.bottom() - geo.height() + 1
+        if (x, y) != (geo.x(), geo.y()):
+            self.move(x, y)
 
     # ---- Geometry persistence -------------------------------------------
 
@@ -275,15 +333,17 @@ class OverlayWindow(QWidget):
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
-        self._apply_no_activate()
+        self._click_through = False  # escape hatch: re-show restores the mouse
+        self._apply_window_ex_style()
         self.raise_()
 
     def hideEvent(self, event) -> None:  # type: ignore[override]
         self.save_geometry()
         super().hideEvent(event)
 
-    def _apply_no_activate(self) -> None:
-        """On Windows, mark the window WS_EX_NOACTIVATE so it never takes focus.
+    def _apply_window_ex_style(self) -> None:
+        """On Windows, apply WS_EX_NOACTIVATE (never steal focus) and, when
+        click-through is enabled, WS_EX_TRANSPARENT (mouse passes to the game).
 
         ``WA_ShowWithoutActivating`` stops the initial show from stealing focus,
         but a click on the drag bar would otherwise activate the window and pull
@@ -297,12 +357,16 @@ class OverlayWindow(QWidget):
             GWL_EXSTYLE = -20
             WS_EX_NOACTIVATE = 0x08000000
             WS_EX_TOOLWINDOW = 0x00000080
+            WS_EX_TRANSPARENT = 0x00000020
             hwnd = int(self.winId())
             user32 = ctypes.windll.user32
-            current = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            user32.SetWindowLongW(
-                hwnd, GWL_EXSTYLE, current | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
-            )
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            style |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
+            if self._click_through:
+                style |= WS_EX_TRANSPARENT
+            else:
+                style &= ~WS_EX_TRANSPARENT
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, style)
         except Exception:
             # Best-effort: WA_ShowWithoutActivating still covers the common path.
             pass
@@ -310,37 +374,40 @@ class OverlayWindow(QWidget):
     # ---- Styling --------------------------------------------------------
 
     def _panel_qss(self) -> str:
-        return """
-        QFrame#OverlayPanel {
+        return _PANEL_QSS_TEMPLATE.format(font_size=self._font_size)
+
+
+_PANEL_QSS_TEMPLATE = """
+        QFrame#OverlayPanel {{
             background: rgba(8, 8, 10, 235);
             border: 1px solid rgba(224, 90, 43, 200);
             border-radius: 10px;
-        }
-        QWidget#OverlayTitleBar {
+        }}
+        QWidget#OverlayTitleBar {{
             background: rgba(26, 26, 31, 230);
             border-top-left-radius: 9px;
             border-top-right-radius: 9px;
-        }
-        QLabel#OverlayTitle {
+        }}
+        QLabel#OverlayTitle {{
             color: #e05a2b;
             font-weight: 700;
             font-size: 11px;
             background: transparent;
-        }
-        QWidget#OverlayBody { background: transparent; }
-        QLabel#OverlayMessage {
+        }}
+        QWidget#OverlayBody {{ background: transparent; }}
+        QLabel#OverlayMessage {{
             color: #ffffff;
             background: transparent;
             font-family: "Consolas", "Roboto Mono", monospace;
-            font-size: 13px;
-        }
-        QLabel#OverlayHint {
+            font-size: {font_size}px;
+        }}
+        QLabel#OverlayHint {{
             color: #8888a0;
             background: transparent;
             font-size: 12px;
             font-style: italic;
-        }
-        QPushButton#OverlayToolButton {
+        }}
+        QPushButton#OverlayToolButton {{
             background: rgba(255, 255, 255, 18);
             color: #c8c8d4;
             border: none;
@@ -348,9 +415,9 @@ class OverlayWindow(QWidget):
             font-weight: 700;
             font-size: 12px;
             padding: 0;
-        }
-        QPushButton#OverlayToolButton:hover {
+        }}
+        QPushButton#OverlayToolButton:hover {{
             background: rgba(224, 90, 43, 180);
             color: white;
-        }
+        }}
         """

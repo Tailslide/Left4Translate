@@ -11,14 +11,17 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections import deque
 from html import escape
-from typing import Optional, TextIO
+from typing import Deque, Optional, TextIO, Tuple
 
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -55,6 +58,11 @@ class LogsTab(QWidget):
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._min_level = logging.NOTSET
+        self._search_text = ""
+        # Full record buffer, independent of the current filter, so changing
+        # the filter (or searching) can rebuild the view instead of losing
+        # everything that was filtered out at arrival time.
+        self._buffer: Deque[Tuple[int, str]] = deque(maxlen=self.MAX_LINES)
         self._handler: Optional[QtLogHandler] = None
         self._attached_logger: Optional[logging.Logger] = None
         self._stdout_tee: Optional[StreamTee] = None
@@ -85,7 +93,19 @@ class LogsTab(QWidget):
         self.level_combo.currentIndexChanged.connect(self._on_level_changed)
         row.addWidget(self.level_combo)
 
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Filter…")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setMaximumWidth(260)
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        row.addWidget(self.search_edit)
+
         row.addStretch(1)
+
+        self.save_button = QPushButton("Save…")
+        self.save_button.setToolTip("Save the captured log to a text file")
+        self.save_button.clicked.connect(self.save_to_file)
+        row.addWidget(self.save_button)
 
         self.autoscroll_check = QCheckBox("Auto-scroll")
         self.autoscroll_check.setChecked(True)
@@ -188,20 +208,56 @@ class LogsTab(QWidget):
             logging.getLogger("console.stderr").error("%s", line)
 
     def _append(self, levelno: int, message: str) -> None:
-        if levelno < self._min_level:
+        self._buffer.append((levelno, message))
+        if not self._passes_filter(levelno, message):
             return
-        color = _LEVEL_COLOR.get(levelno, _LEVEL_COLOR[logging.INFO])
-        self.view.appendHtml(
-            f'<span style="color:{color}; white-space:pre">{escape(message)}</span>'
-        )
+        self._render_line(levelno, message)
         if self.autoscroll_check.isChecked():
             bar = self.view.verticalScrollBar()
             bar.setValue(bar.maximum())
 
+    def _render_line(self, levelno: int, message: str) -> None:
+        color = _LEVEL_COLOR.get(levelno, _LEVEL_COLOR[logging.INFO])
+        self.view.appendHtml(
+            f'<span style="color:{color}; white-space:pre">{escape(message)}</span>'
+        )
+
+    def _passes_filter(self, levelno: int, message: str) -> bool:
+        if levelno < self._min_level:
+            return False
+        return self._search_text in message.lower() if self._search_text else True
+
+    def _rebuild_view(self) -> None:
+        self.view.clear()
+        for levelno, message in self._buffer:
+            if self._passes_filter(levelno, message):
+                self._render_line(levelno, message)
+        bar = self.view.verticalScrollBar()
+        bar.setValue(bar.maximum())
+
     def _on_level_changed(self, index: int) -> None:
         self._min_level = _LEVELS[index][1]
+        self._rebuild_view()
+
+    def _on_search_changed(self, text: str) -> None:
+        self._search_text = text.strip().lower()
+        self._rebuild_view()
+
+    def save_to_file(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save log", "left4translate.log", "Log files (*.log *.txt)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                for _levelno, message in self._buffer:
+                    fh.write(message + "\n")
+        except OSError as exc:
+            self._append(logging.ERROR, f"Could not save log: {exc}")
 
     # ---- Public helpers ----------------------------------------------------
 
     def clear(self) -> None:
+        self._buffer.clear()
         self.view.clear()

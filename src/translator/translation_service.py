@@ -2,6 +2,8 @@ from typing import Dict, Optional, Tuple
 from cachetools import LRUCache
 import requests
 from datetime import datetime
+import json
+import os
 import threading
 import time
 import logging
@@ -171,7 +173,9 @@ class TranslationService:
         target_language: str = "en",
         cache_size: int = 1000,
         rate_limit_per_minute: int = 100,
-        retry_attempts: int = 3
+        retry_attempts: int = 3,
+        slang_path: Optional[str] = None,
+        cache_file: Optional[str] = None
     ):
         self.api_key = api_key
         self.base_url = "https://translation.googleapis.com/language/translate/v2"
@@ -187,6 +191,59 @@ class TranslationService:
         # this we degrade gracefully (original text) instead of stalling the
         # reader/voice thread indefinitely.
         self.rate_limit_wait_seconds = 5.0
+        # Built-in slang plus optional user overrides from a JSON file
+        # (config/slang_es.json) - editable without touching code.
+        self._slang_dict = self._load_slang(slang_path)
+        # Optional on-disk cache so translations survive restarts (saves
+        # API quota across sessions). Loaded now, written by save_cache().
+        self._cache_file = cache_file
+        self._load_cache_file()
+
+    @staticmethod
+    def _load_slang(slang_path: Optional[str]) -> Dict[str, str]:
+        merged = dict(SPANISH_SLANG_DICT)
+        if not slang_path:
+            return merged
+        try:
+            if os.path.exists(slang_path):
+                with open(slang_path, "r", encoding="utf-8") as fh:
+                    user = json.load(fh)
+                if isinstance(user, dict):
+                    merged.update({str(k).lower(): str(v) for k, v in user.items()})
+                    logging.info(f"Loaded {len(user)} slang overrides from {slang_path}")
+                else:
+                    logging.warning(f"Slang file {slang_path} must contain a JSON object")
+        except (OSError, json.JSONDecodeError) as e:
+            logging.warning(f"Could not load slang file {slang_path}: {e}")
+        return merged
+
+    def _load_cache_file(self) -> None:
+        if not self._cache_file or not os.path.exists(self._cache_file):
+            return
+        try:
+            with open(self._cache_file, "r", encoding="utf-8") as fh:
+                stored = json.load(fh)
+            with self._cache_lock:
+                for key, value in stored.items():
+                    if isinstance(value, list) and len(value) == 2:
+                        self.cache[key] = (value[0], value[1])
+            logging.info(f"Loaded {len(stored)} cached translations from {self._cache_file}")
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            logging.warning(f"Could not load translation cache {self._cache_file}: {e}")
+
+    def save_cache(self) -> None:
+        """Persist the in-memory cache if a cache file is configured."""
+        if not self._cache_file:
+            return
+        try:
+            with self._cache_lock:
+                snapshot = {k: list(v) for k, v in self.cache.items()}
+            os.makedirs(os.path.dirname(os.path.abspath(self._cache_file)), exist_ok=True)
+            with open(self._cache_file, "w", encoding="utf-8") as fh:
+                json.dump(snapshot, fh, ensure_ascii=False)
+            logging.info(f"Saved {len(snapshot)} cached translations to {self._cache_file}")
+        except OSError as e:
+            logging.warning(f"Could not save translation cache: {e}")
         
     def _clean_text(self, text: str) -> str:
         """Remove color codes and other special characters."""
@@ -198,11 +255,8 @@ class TranslationService:
         return cleaned
 
     def _get_slang_translations(self) -> dict:
-        """Get dictionary of Spanish gaming/internet slang translations.
-        
-        Returns the module-level SPANISH_SLANG_DICT constant.
-        """
-        return SPANISH_SLANG_DICT
+        """Built-in slang merged with any user overrides loaded at startup."""
+        return self._slang_dict
 
     def _translate_slang(self, text: str) -> tuple[str, bool]:
         """
