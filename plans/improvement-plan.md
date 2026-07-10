@@ -7,6 +7,10 @@
 > branch; see `CHANGELOG.md` (Unreleased) for the user-facing summary and the
 > commit history for per-item details. All 25 numbered bugs are fixed with
 > regression tests (124 tests, plus ruff, running in the new CI workflow).
+> One manual step remains: the CI workflow is committed as
+> `ci/github-actions-ci.yml` because the push credential lacked `workflow`
+> scope — `git mv` it to `.github/workflows/ci.yml` to enable it.
+>
 > Deliberately deferred, in case a later pass wants them:
 > - Tab icons (needs proper icon assets; Qt's standard pixmaps look worse
 >   than no icons).

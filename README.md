@@ -374,6 +374,17 @@ The suite lives in `tests/` (configured via `pyproject.toml`); tests that need
 live APIs or physical hardware are marked `live` / `hardware` and deselected
 by default. The standalone diagnostic scripts remain in `src/tools/`.
 
+**Continuous integration:** a ready-to-use GitHub Actions workflow (pytest +
+ruff on Linux and Windows) lives at [`ci/github-actions-ci.yml`](ci/github-actions-ci.yml).
+It could not be installed automatically (pushing workflow files needs a token
+with `workflow` scope) — to enable it, move the file to
+`.github/workflows/ci.yml` and commit:
+
+```bash
+git mv ci/github-actions-ci.yml .github/workflows/ci.yml
+git commit -m "Enable CI workflow"
+```
+
 The test suite includes:
 - Chat message pattern matching
 - Translation service functionality
