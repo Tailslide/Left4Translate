@@ -75,8 +75,11 @@ def team_color(team: str | None) -> str:
 
 
 # ---- Stylesheet -----------------------------------------------------------
+# One template, two token sets: the dark theme owns the visual personality,
+# and the light theme mirrors it so switching themes doesn't drop half the
+# styling back to bare Fusion defaults.
 
-DARK_QSS = f"""
+_QSS_TEMPLATE = """
 QWidget {{
     background: {BG_WINDOW};
     color: {TEXT_PRIMARY};
@@ -411,4 +414,50 @@ QLabel#HintText {{
     color: {TEXT_SECONDARY};
     font-size: 12px;
 }}
+QLabel#EmptyHint {{
+    color: {TEXT_DIM};
+    font-size: 13px;
+    background: transparent;
+}}
 """
+
+_DARK_TOKENS = {
+    "BG_WINDOW": BG_WINDOW,
+    "BG_PANEL": BG_PANEL,
+    "BG_CARD": BG_CARD,
+    "BG_HOVER": BG_HOVER,
+    "BG_STRIPE": BG_STRIPE,
+    "BORDER": BORDER,
+    "BORDER_HI": BORDER_HI,
+    "ACCENT": ACCENT,
+    "ACCENT_HOVER": ACCENT_HOVER,
+    "ACCENT_DIM": ACCENT_DIM,
+    "RED": RED,
+    "TEXT_PRIMARY": TEXT_PRIMARY,
+    "TEXT_SECONDARY": TEXT_SECONDARY,
+    "TEXT_DIM": TEXT_DIM,
+}
+
+# Light counterparts of the dark tokens; the orange accent carries over.
+LIGHT_BG_WINDOW = "#f5f5f7"
+LIGHT_TEXT_PRIMARY = "#1d1d24"
+
+_LIGHT_TOKENS = {
+    "BG_WINDOW": LIGHT_BG_WINDOW,
+    "BG_PANEL": "#ececf0",
+    "BG_CARD": "#ffffff",
+    "BG_HOVER": "#e4e4ea",
+    "BG_STRIPE": "#efeff3",
+    "BORDER": "#d5d5de",
+    "BORDER_HI": "#bcbcc8",
+    "ACCENT": ACCENT,
+    "ACCENT_HOVER": ACCENT_HOVER,
+    "ACCENT_DIM": "#f3cdbd",
+    "RED": RED,
+    "TEXT_PRIMARY": LIGHT_TEXT_PRIMARY,
+    "TEXT_SECONDARY": "#5a5a6e",
+    "TEXT_DIM": "#8a8a9a",
+}
+
+DARK_QSS = _QSS_TEMPLATE.format(**_DARK_TOKENS)
+LIGHT_QSS = _QSS_TEMPLATE.format(**_LIGHT_TOKENS)

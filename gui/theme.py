@@ -11,7 +11,14 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QStyleFactory
 
 from gui.settings_store import THEME_DARK, THEME_LIGHT, THEME_SYSTEM, THEMES
-from gui.styles import BG_WINDOW, DARK_QSS, TEXT_PRIMARY
+from gui.styles import (
+    BG_WINDOW,
+    DARK_QSS,
+    LIGHT_BG_WINDOW,
+    LIGHT_QSS,
+    LIGHT_TEXT_PRIMARY,
+    TEXT_PRIMARY,
+)
 
 
 def _dark_palette() -> QPalette:
@@ -41,6 +48,33 @@ def _dark_palette() -> QPalette:
     return p
 
 
+def _light_palette() -> QPalette:
+    """Palette consistent with ``gui.styles.LIGHT_QSS`` for native widgets."""
+    p = QPalette()
+    win = QColor(LIGHT_BG_WINDOW)
+    text = QColor(LIGHT_TEXT_PRIMARY)
+    p.setColor(QPalette.ColorRole.Window, win)
+    p.setColor(QPalette.ColorRole.WindowText, text)
+    p.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+    p.setColor(QPalette.ColorRole.AlternateBase, QColor("#efeff3"))
+    p.setColor(QPalette.ColorRole.ToolTipBase, QColor("#ffffff"))
+    p.setColor(QPalette.ColorRole.ToolTipText, text)
+    p.setColor(QPalette.ColorRole.Text, text)
+    p.setColor(QPalette.ColorRole.Button, QColor("#ffffff"))
+    p.setColor(QPalette.ColorRole.ButtonText, text)
+    p.setColor(QPalette.ColorRole.BrightText, QColor("#e05252"))
+    p.setColor(QPalette.ColorRole.Highlight, QColor("#e05a2b"))
+    p.setColor(QPalette.ColorRole.HighlightedText, QColor("#ffffff"))
+    p.setColor(QPalette.ColorRole.Link, QColor("#e05a2b"))
+    p.setColor(
+        QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, QColor("#a0a0b0")
+    )
+    p.setColor(
+        QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor("#a0a0b0")
+    )
+    return p
+
+
 def _fusion_light_palette() -> QPalette:
     return QStyleFactory.create("Fusion").standardPalette()
 
@@ -59,9 +93,11 @@ def apply_theme(app: QApplication, theme: str) -> str:
         app.setPalette(_dark_palette())
         app.setStyleSheet(DARK_QSS)
     elif theme == THEME_LIGHT:
+        # Light now mirrors dark's full QSS identity instead of dropping
+        # back to bare Fusion (which lost half the product's styling).
         app.setStyle("Fusion")
-        app.setPalette(_fusion_light_palette())
-        app.setStyleSheet("")
+        app.setPalette(_light_palette())
+        app.setStyleSheet(LIGHT_QSS)
     else:  # system
         app.setPalette(app.style().standardPalette())
         app.setStyleSheet("")

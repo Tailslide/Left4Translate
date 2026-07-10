@@ -102,6 +102,9 @@ class StatusPill(QLabel):
         label = text if text is not None else self._name
         self.setText(f'<span style="color:{color}">●</span> '
                      f'<span style="color:#8888a0">{label}</span>')
+        # Long detail strings get elided visually; the tooltip keeps them
+        # readable, and always names the component and raw state.
+        self.setToolTip(f"{self._name}: {label} ({state})")
 
 
 class StatusBank(QWidget):
