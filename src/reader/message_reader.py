@@ -52,8 +52,25 @@ class GameLogHandler(FileSystemEventHandler):
         
     def on_modified(self, event: FileModifiedEvent):
         """Called when the log file is modified."""
-        if not event.is_directory and os.path.samefile(event.src_path, self.file_path):
+        if not event.is_directory and self._is_our_file(event.src_path):
             self._process_new_lines(event.src_path)
+
+    def on_created(self, event):
+        """Called when a file appears - catches the log being (re)created."""
+        if not event.is_directory and self._is_our_file(event.src_path):
+            self.logger.info(f"Log file created: {event.src_path}")
+            self.last_position = 0
+            self._fingerprint = b""
+            self._process_new_lines(event.src_path)
+
+    def _is_our_file(self, path: str) -> bool:
+        """Robust path comparison - samefile raises if either path vanished."""
+        try:
+            return os.path.samefile(path, self.file_path)
+        except OSError:
+            return os.path.normcase(os.path.abspath(path)) == os.path.normcase(
+                os.path.abspath(self.file_path)
+            )
             
     def _get_last_n_lines(self, file_path: str, n: int = 10) -> list[str]:
         """Get the last N lines from a file that match our message pattern."""
@@ -267,9 +284,14 @@ class GameMessageReader:
             raise
         
     def stop_monitoring(self):
-        """Stop monitoring the log file."""
+        """Stop monitoring the log file. Safe to call even if monitoring
+        never started (joining an unstarted observer would raise)."""
         self.logger.info("Stopping log file monitoring...")
         self.running = False
-        self.observer.stop()
-        self.observer.join()
+        try:
+            self.observer.stop()
+            if self.observer.is_alive():
+                self.observer.join()
+        except RuntimeError as e:
+            self.logger.debug(f"Observer was not running: {e}")
         self.logger.info("Log file monitoring stopped")

@@ -33,7 +33,8 @@ class VoiceTranslationManager:
         config: Dict[str, Any],
         translation_service: TranslationService,
         screen_controller = None,
-        on_translation_callback: Optional[Callable[[str, str], None]] = None
+        on_translation_callback: Optional[Callable[[str, str], None]] = None,
+        on_status_callback: Optional[Callable[[str, str], None]] = None
     ):
         """
         Initialize the voice translation manager.
@@ -48,6 +49,7 @@ class VoiceTranslationManager:
         self.translation_service = translation_service
         self.screen_controller = screen_controller
         self.on_translation_callback = on_translation_callback
+        self.on_status_callback = on_status_callback
         
         # Extract configuration
         voice_config = config.get("voice_translation", {})
@@ -63,6 +65,16 @@ class VoiceTranslationManager:
         
         logger.info("Voice translation manager initialized")
     
+    def _emit_status(self, state: str, detail: str = "") -> None:
+        """Report a state change (recording/transcribing/armed) - best-effort."""
+        callback = getattr(self, "on_status_callback", None)
+        if callback is None:
+            return
+        try:
+            callback(state, detail)
+        except Exception as e:  # observers must never break the pipeline
+            logger.debug(f"on_status observer error: {e}")
+
     def _init_components(self, config: Dict[str, Any]) -> None:
         """
         Initialize voice translation components.
@@ -213,8 +225,10 @@ class VoiceTranslationManager:
             logger.info("Attempting to start voice recording...")
             if self.voice_recorder.start_recording():
                 logger.info("Successfully started recording on button press")
+                self._emit_status("recording")
             else:
                 logger.error("Failed to start recording on button press")
+                self._emit_status("error", "Could not start recording")
             
         except Exception as e:
             logger.error(f"Error handling button press: {e}")
@@ -242,6 +256,7 @@ class VoiceTranslationManager:
             
             # Process in a separate thread to avoid blocking
             logger.info("Starting audio processing in separate thread")
+            self._emit_status("transcribing")
             threading.Thread(
                 target=self._process_audio,
                 args=(audio_data,),
@@ -339,7 +354,10 @@ class VoiceTranslationManager:
             logger.error(f"Error processing audio: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-    
+        finally:
+            # Back to push-to-talk-ready regardless of outcome.
+            self._emit_status("armed")
+
     def update_config(self, config: Dict[str, Any]) -> None:
         """
         Update configuration.

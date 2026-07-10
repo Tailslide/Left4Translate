@@ -216,7 +216,8 @@ class Left4Translate:
                     config=config_dict,
                     translation_service=self.translator,
                     screen_controller=self.screen,
-                    on_translation_callback=self._handle_voice_translation
+                    on_translation_callback=self._handle_voice_translation,
+                    on_status_callback=self._handle_voice_status
                 )
             else:
                 if self.mode in ['voice', 'both'] and not voice_enabled:
@@ -284,6 +285,10 @@ class Left4Translate:
 
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
+
+    def _handle_voice_status(self, state: str, detail: str = ""):
+        """Forward voice pipeline state (recording/transcribing/armed) to observers."""
+        self._emit_status("voice", state, detail)
 
     def _handle_voice_translation(self, transcript: str, translated: str):
         """Receive a completed voice translation and forward it to observers."""

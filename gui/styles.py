@@ -56,6 +56,7 @@ def status_dot_color(state: str) -> str:
         "connected": GREEN,
         "starting": YELLOW,
         "recording": YELLOW,
+        "transcribing": YELLOW,
         "disconnected": YELLOW,
         "error": RED,
     }.get(state, TEXT_DIM)

@@ -144,6 +144,7 @@ class VoiceTab(QWidget):
         text = {
             "armed": "Armed — hold trigger to talk",
             "recording": "Recording…",
+            "transcribing": "Transcribing…",
             "error": detail or "Voice error",
             "idle": "Voice idle",
         }.get(state, detail or state.capitalize())

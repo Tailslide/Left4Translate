@@ -53,7 +53,6 @@ def manager_module():
     for parent in ("input", "translator", "utils"):
         sys.modules[parent] = types.ModuleType(parent)
 
-    _stub("numpy")
     _stub("input.mouse_handler", MouseHandler=_KwargsSink)
     _stub("audio.voice_recorder", VoiceRecorder=_KwargsSink)
     _stub("audio.speech_to_text", SpeechToTextService=_KwargsSink)
