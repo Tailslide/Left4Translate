@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStatusBar,
     QTabWidget,
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self._controller = controller or EngineController(config_path, parent=self)
         self._force_quit = False
         self._running = False
+        self._restart_pending = False
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -238,6 +240,10 @@ class MainWindow(QMainWindow):
         for component in _STATUS_COMPONENTS:
             self._status_bank.set_state(component, "idle", component.capitalize())
         self._show_status("Translation stopped")
+        if self._restart_pending:
+            # Config-saved restart: the old engine is fully down, start anew.
+            self._restart_pending = False
+            self._toggle_engine()
 
     def _on_start_rejected(self, message: str) -> None:
         """Previous engine still winding down: restore the idle UI."""
@@ -260,6 +266,7 @@ class MainWindow(QMainWindow):
         self._start_button.style().unpolish(self._start_button)
         self._start_button.style().polish(self._start_button)
         self._mode_combo.setEnabled(not running)
+        self.settings_tab.set_engine_running(running)
         if self._tray is not None:
             self._tray.set_running(running)
 
@@ -272,8 +279,21 @@ class MainWindow(QMainWindow):
 
     def _on_config_saved(self, config: dict) -> None:
         self.voice_tab.set_config(config)
-        if self._running:
-            self._show_status("Config saved — Stop and Start to apply changes.", 6000)
+        if not self._running:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Apply settings",
+            "Settings saved. Restart translation now to apply them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._restart_pending = True
+            self._show_status("Restarting translation…")
+            self._controller.stop()
+        else:
+            self._show_status("Config saved — will apply on the next Start.", 6000)
 
     # ---- Window / lifecycle ---------------------------------------------
 

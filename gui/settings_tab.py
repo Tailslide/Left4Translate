@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from typing import Any, Dict, List, Optional, Tuple
+import threading
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -33,8 +34,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from gui.widgets import NoScrollComboBox, NoScrollSpinBox
-
 from gui.settings_store import (
     MODES,
     THEME_DARK,
@@ -42,6 +41,92 @@ from gui.settings_store import (
     THEME_SYSTEM,
     SettingsStore,
 )
+from gui.widgets import NoScrollComboBox, NoScrollSpinBox
+
+# ---- Choice presets for the dropdown fields -------------------------------
+# (value, label) pairs. Editable combos accept free text for exotic values.
+
+_LANGS: List[Tuple[str, str]] = [
+    ("en", "en — English"), ("es", "es — Spanish"), ("fr", "fr — French"),
+    ("de", "de — German"), ("pt", "pt — Portuguese"), ("it", "it — Italian"),
+    ("ru", "ru — Russian"), ("ja", "ja — Japanese"), ("ko", "ko — Korean"),
+    ("zh", "zh — Chinese"), ("pl", "pl — Polish"), ("tr", "tr — Turkish"),
+    ("ar", "ar — Arabic"), ("nl", "nl — Dutch"), ("sv", "sv — Swedish"),
+]
+
+_SPEECH_LANGS: List[Tuple[str, str]] = [
+    ("en-US", "en-US — English (US)"), ("en-GB", "en-GB — English (UK)"),
+    ("es-ES", "es-ES — Spanish (Spain)"), ("es-MX", "es-MX — Spanish (Mexico)"),
+    ("fr-FR", "fr-FR — French"), ("de-DE", "de-DE — German"),
+    ("pt-BR", "pt-BR — Portuguese (Brazil)"), ("it-IT", "it-IT — Italian"),
+    ("ru-RU", "ru-RU — Russian"), ("ja-JP", "ja-JP — Japanese"),
+    ("ko-KR", "ko-KR — Korean"), ("pl-PL", "pl-PL — Polish"),
+    ("tr-TR", "tr-TR — Turkish"), ("nl-NL", "nl-NL — Dutch"),
+]
+
+# The only values MouseHandler accepts (src/input/mouse_handler.py); free text
+# used to silently fall back to button4 on any typo.
+_TRIGGER_BUTTONS: List[Tuple[str, str]] = [
+    ("button4", "button4 — side/forward"),
+    ("button5", "button5 — side/back"),
+    ("middle", "middle"),
+    ("right", "right"),
+    ("left", "left"),
+]
+
+_CLIPBOARD_FORMATS: List[Tuple[str, str]] = [
+    ("translated", "translated only"),
+    ("original", "original only"),
+    ("both", "original + translated"),
+]
+
+_SPEECH_MODELS: List[Tuple[str, str]] = [
+    ("default", "default"),
+    ("command_and_search", "command_and_search — short phrases"),
+    ("latest_short", "latest_short"),
+    ("latest_long", "latest_long"),
+    ("phone_call", "phone_call"),
+    ("video", "video"),
+]
+
+
+def _com_ports() -> List[Tuple[str, str]]:
+    """Enumerate serial ports; empty when pyserial or hardware is absent."""
+    try:
+        from serial.tools import list_ports
+
+        return [
+            (p.device, f"{p.device} — {p.description}")
+            for p in sorted(list_ports.comports(), key=lambda p: p.device)
+        ]
+    except Exception:
+        return []
+
+
+def _input_devices() -> List[Tuple[str, str]]:
+    """Enumerate audio input devices; 'default' is always offered."""
+    devices: List[Tuple[str, str]] = [("default", "default")]
+    try:
+        import sounddevice as sd
+
+        for index, dev in enumerate(sd.query_devices()):
+            if dev.get("max_input_channels", 0) > 0:
+                devices.append((dev["name"], f"{dev['name']}  (#{index})"))
+    except Exception:
+        pass
+    return devices
+
+
+# Choice presets: name -> (options-provider, editable, refreshable)
+_CHOICES: Dict[str, Tuple[Callable[[], List[Tuple[str, str]]], bool, bool]] = {
+    "lang": (lambda: _LANGS, True, False),
+    "speechlang": (lambda: _SPEECH_LANGS, True, False),
+    "trigger": (lambda: _TRIGGER_BUTTONS, False, False),
+    "clipformat": (lambda: _CLIPBOARD_FORMATS, False, False),
+    "speechmodel": (lambda: _SPEECH_MODELS, False, False),
+    "ports": (_com_ports, True, True),
+    "miclist": (_input_devices, True, True),
+}
 
 # (config dotted-path, kind) for each engine-config field the form exposes.
 # kind drives how the widget is read/written: text / int / bool.
@@ -49,22 +134,24 @@ _FIELDS: List[Tuple[str, str]] = [
     ("game.logPath", "text"),
     ("game.pollInterval", "int"),
     ("translation.apiKey", "secret"),
-    ("translation.targetLanguage", "text"),
+    ("translation.targetLanguage", "choice:lang"),
     ("translation.cacheSize", "int"),
     ("translation.rateLimitPerMinute", "int"),
     ("screen.enabled", "bool"),
-    ("screen.port", "text"),
+    ("screen.port", "choice:ports"),
     ("screen.baudRate", "int"),
     ("screen.brightness", "int"),
     ("screen.display.maxMessages", "int"),
     ("screen.display.messageTimeout", "int"),
     ("voice_translation.enabled", "bool"),
-    ("voice_translation.trigger_button.button", "text"),
-    ("voice_translation.audio.device", "text"),
-    ("voice_translation.translation.target_language", "text"),
-    ("voice_translation.speech_to_text.language", "text"),
+    ("voice_translation.trigger_button.button", "choice:trigger"),
+    ("voice_translation.audio.device", "choice:miclist"),
+    ("voice_translation.translation.target_language", "choice:lang"),
+    ("voice_translation.speech_to_text.language", "choice:speechlang"),
+    ("voice_translation.speech_to_text.model", "choice:speechmodel"),
     ("voice_translation.speech_to_text.credentials_path", "text"),
     ("voice_translation.clipboard.auto_copy", "bool"),
+    ("voice_translation.clipboard.format", "choice:clipformat"),
 ]
 
 
@@ -96,6 +183,8 @@ class SettingsTab(QWidget):
     theme_changed = Signal(str)
     config_saved = Signal(dict)
     status_message = Signal(str)
+    # Diagnostics workers emit their outcome here (marshalled to GUI thread).
+    _diag_done = Signal(str)
 
     def __init__(self, config_path: str, store: SettingsStore,
                  parent: Optional[QWidget] = None) -> None:
@@ -105,6 +194,7 @@ class SettingsTab(QWidget):
         self._raw: Dict[str, Any] = {}
         self._widgets: Dict[str, QWidget] = {}
         self._load_failed = False
+        self._engine_running = False
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -135,13 +225,13 @@ class SettingsTab(QWidget):
         ]))
         self._form_root.addWidget(self._group("Translation", [
             ("translation.apiKey", "Google API key", "secret"),
-            ("translation.targetLanguage", "Target language", "text"),
+            ("translation.targetLanguage", "Target language", "choice:lang"),
             ("translation.cacheSize", "Cache size", "int:0:100000"),
             ("translation.rateLimitPerMinute", "Rate limit / min", "int:1:100000"),
         ]))
         self._form_root.addWidget(self._group("Turing Screen", [
             ("screen.enabled", "Use hardware Turing screen (uncheck to use the overlay only)", "bool"),
-            ("screen.port", "Serial port", "text"),
+            ("screen.port", "Serial port", "choice:ports"),
             ("screen.baudRate", "Baud rate", "int:9600:1000000"),
             ("screen.brightness", "Brightness", "int:0:100"),
             ("screen.display.maxMessages", "Max messages", "int:1:50"),
@@ -149,13 +239,16 @@ class SettingsTab(QWidget):
         ]))
         self._form_root.addWidget(self._group("Voice Translation", [
             ("voice_translation.enabled", "Enable voice translation", "bool"),
-            ("voice_translation.trigger_button.button", "Trigger button", "text"),
-            ("voice_translation.audio.device", "Microphone device", "text"),
-            ("voice_translation.translation.target_language", "Voice target language", "text"),
-            ("voice_translation.speech_to_text.language", "Speech language", "text"),
+            ("voice_translation.trigger_button.button", "Trigger button", "choice:trigger"),
+            ("voice_translation.audio.device", "Microphone device", "choice:miclist"),
+            ("voice_translation.translation.target_language", "Voice target language", "choice:lang"),
+            ("voice_translation.speech_to_text.language", "Speech language", "choice:speechlang"),
+            ("voice_translation.speech_to_text.model", "Speech model", "choice:speechmodel"),
             ("voice_translation.speech_to_text.credentials_path", "Google credentials JSON", "browse_file"),
             ("voice_translation.clipboard.auto_copy", "Auto-copy translation", "bool"),
+            ("voice_translation.clipboard.format", "Clipboard contents", "choice:clipformat"),
         ]))
+        self._form_root.addWidget(self._diagnostics_group())
         self._form_root.addStretch(1)
 
     def _app_prefs_group(self) -> QGroupBox:
@@ -209,9 +302,29 @@ class SettingsTab(QWidget):
                 form.addRow("", widget)
             elif kind == "browse_file":
                 form.addRow(self._cap(label), self._with_browse(widget))
+            elif kind.startswith("choice:"):
+                name = kind.split(":", 1)[1]
+                provider, _editable, refreshable = _CHOICES[name]
+                if refreshable:
+                    form.addRow(self._cap(label), self._with_refresh(widget, provider))
+                else:
+                    form.addRow(self._cap(label), widget)
             else:
                 form.addRow(self._cap(label), widget)
         return box
+
+    def _with_refresh(self, combo: QComboBox, provider) -> QWidget:
+        wrap = QWidget()
+        row = QHBoxLayout(wrap)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        row.addWidget(combo, stretch=1)
+        button = QPushButton("↻")
+        button.setFixedWidth(32)
+        button.setToolTip("Re-scan available devices")
+        button.clicked.connect(lambda: self._fill_combo(combo, provider()))
+        row.addWidget(button)
+        return wrap
 
     def _make_widget(self, path: str, kind: str) -> QWidget:
         if kind == "bool":
@@ -228,10 +341,52 @@ class SettingsTab(QWidget):
             hi = int(parts[2]) if len(parts) > 2 else 1_000_000
             spin.setRange(lo, hi)
             return spin
+        if kind.startswith("choice:"):
+            provider, editable, _refreshable = _CHOICES[kind.split(":", 1)[1]]
+            combo = NoScrollComboBox()
+            combo.setEditable(editable)
+            self._fill_combo(combo, provider())
+            return combo
         edit = QLineEdit()
         if kind == "browse_file":
             edit.setPlaceholderText("Path…")
         return edit
+
+    @staticmethod
+    def _fill_combo(combo: QComboBox, options: List[Tuple[str, str]]) -> None:
+        current = combo.currentText()
+        combo.clear()
+        for value, label in options:
+            combo.addItem(label, value)
+        if current:
+            SettingsTab._set_combo_value(combo, current)
+
+    @staticmethod
+    def _set_combo_value(combo: QComboBox, value: str) -> None:
+        if not value:
+            # Nothing configured: keep the first preset selected (editable
+            # combos clear their text so the stored value stays empty).
+            if combo.isEditable():
+                combo.setEditText("")
+            return
+        idx = combo.findData(value)
+        if idx < 0:
+            idx = combo.findText(value)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+        elif combo.isEditable():
+            combo.setEditText(value)
+        else:
+            combo.addItem(value, value)
+            combo.setCurrentIndex(combo.count() - 1)
+
+    @staticmethod
+    def _combo_value(combo: QComboBox) -> str:
+        data = combo.currentData()
+        # For a preset entry return its value; for free text the label IS the value.
+        if data is not None and combo.currentText() == combo.itemText(combo.currentIndex()):
+            return str(data)
+        return combo.currentText().strip()
 
     def _with_browse(self, edit: QWidget) -> QWidget:
         wrap = QWidget()
@@ -318,10 +473,14 @@ class SettingsTab(QWidget):
             if widget is None:
                 continue
             value = _dig(self._raw, path)
-            # screen.enabled is new: absent in older configs means "on", so the
-            # hardware screen isn't silently disabled on the next Save.
-            if value is None and path == "screen.enabled":
-                value = True
+            # Defaults for keys that may be absent in older configs, chosen so
+            # a Save doesn't silently change behaviour.
+            if value is None:
+                value = {
+                    "screen.enabled": True,
+                    "voice_translation.speech_to_text.model": "default",
+                    "voice_translation.clipboard.format": "translated",
+                }.get(path)
             self._set_widget_value(widget, kind, value)
 
     def save(self) -> None:
@@ -362,6 +521,8 @@ class SettingsTab(QWidget):
                 widget.setValue(int(value))
             except (TypeError, ValueError):
                 pass
+        elif kind.startswith("choice"):
+            self._set_combo_value(widget, "" if value is None else str(value))
         else:  # text / secret
             widget.setText("" if value is None else str(value))
 
@@ -370,7 +531,147 @@ class SettingsTab(QWidget):
             return widget.isChecked()
         if kind.startswith("int"):
             return widget.value()
+        if kind.startswith("choice"):
+            return self._combo_value(widget)
         return widget.text()
+
+    # ---- Diagnostics ------------------------------------------------------
+
+    def _diagnostics_group(self) -> QGroupBox:
+        box = QGroupBox("Diagnostics")
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(0, 10, 0, 0)
+        lay.setSpacing(8)
+
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._btn_test_translation = QPushButton("Test translation")
+        self._btn_test_translation.setToolTip(
+            "One round-trip to the Translation API with the key above"
+        )
+        self._btn_test_translation.clicked.connect(self._test_translation)
+        self._btn_test_screen = QPushButton("Test screen")
+        self._btn_test_screen.setToolTip(
+            "Connect to the Turing screen on the configured port and show a splash"
+        )
+        self._btn_test_screen.clicked.connect(self._test_screen)
+        self._btn_test_mic = QPushButton("Test microphone")
+        self._btn_test_mic.setToolTip("Record 1.5s and report the level")
+        self._btn_test_mic.clicked.connect(self._test_mic)
+        for btn in (self._btn_test_translation, self._btn_test_screen, self._btn_test_mic):
+            row.addWidget(btn)
+        row.addStretch(1)
+        lay.addLayout(row)
+
+        self._diag_label = QLabel("")
+        self._diag_label.setObjectName("HintText")
+        self._diag_label.setWordWrap(True)
+        lay.addWidget(self._diag_label)
+
+        self._diag_done.connect(self._on_diag_done)
+        return box
+
+    def set_engine_running(self, running: bool) -> None:
+        """Hardware diagnostics must not fight the engine over the serial
+        port / microphone while it runs; the API test is always safe."""
+        self._engine_running = running
+        self._btn_test_screen.setEnabled(not running)
+        self._btn_test_mic.setEnabled(not running)
+        tip = "Stop the engine first" if running else ""
+        self._btn_test_screen.setToolTip(tip or "Connect to the Turing screen on the configured port and show a splash")
+        self._btn_test_mic.setToolTip(tip or "Record 1.5s and report the level")
+
+    def _on_diag_done(self, message: str) -> None:
+        self._diag_label.setText(message)
+        self.status_message.emit(message)
+        self._btn_test_translation.setEnabled(True)
+        # Screen/mic buttons may be gated by a running engine; re-enable only
+        # when they weren't disabled for that reason.
+        if not self._engine_running:
+            self._btn_test_screen.setEnabled(True)
+            self._btn_test_mic.setEnabled(True)
+
+    def _run_diagnostic(self, button: QPushButton, work) -> None:
+        button.setEnabled(False)
+        self._diag_label.setText("Working…")
+
+        def _wrapped():
+            try:
+                self._diag_done.emit(work())
+            except Exception as exc:  # surfaced, never raised into the GUI
+                self._diag_done.emit(f"Failed: {exc}")
+
+        threading.Thread(target=_wrapped, daemon=True).start()
+
+    def _test_translation(self) -> None:
+        api_key = self._widgets["translation.apiKey"].text().strip()
+        target = self._combo_value(self._widgets["translation.targetLanguage"]) or "en"
+        if not api_key:
+            self._diag_label.setText("Enter a Google API key first.")
+            return
+
+        def work() -> str:
+            from gui.engine_controller import _ensure_engine_importable
+
+            _ensure_engine_importable()
+            from translator.translation_service import TranslationService
+
+            svc = TranslationService(api_key=api_key, target_language=target)
+            translated, source = svc.translate_with_detection("hola amigo")
+            return f"Translation OK: 'hola amigo' → '{translated}' (detected: {source})"
+
+        self._run_diagnostic(self._btn_test_translation, work)
+
+    def _test_screen(self) -> None:
+        port = self._combo_value(self._widgets["screen.port"])
+        baud = self._widgets["screen.baudRate"].value()
+        brightness = self._widgets["screen.brightness"].value()
+        if not port:
+            self._diag_label.setText("Pick a serial port first.")
+            return
+
+        def work() -> str:
+            from gui.engine_controller import _ensure_engine_importable
+
+            _ensure_engine_importable()
+            from display.screen_controller import ScreenController
+
+            screen = ScreenController(port=port, baud_rate=baud, brightness=brightness)
+            try:
+                if screen.connect():
+                    return f"Screen OK on {port} — splash shown."
+                return f"Could not connect to a Turing screen on {port}."
+            finally:
+                try:
+                    screen.disconnect()
+                except Exception:
+                    pass
+
+        self._run_diagnostic(self._btn_test_screen, work)
+
+    def _test_mic(self) -> None:
+        device = self._combo_value(self._widgets["voice_translation.audio.device"])
+
+        def work() -> str:
+            import numpy as np
+            import sounddevice as sd
+
+            seconds, rate = 1.5, 16000
+            kwargs = {} if device in ("", "default") else {"device": device}
+            clip = sd.rec(int(seconds * rate), samplerate=rate, channels=1,
+                          dtype="float32", **kwargs)
+            sd.wait()
+            rms = float(np.sqrt(np.mean(np.square(clip))))
+            db = 20 * float(np.log10(rms)) if rms > 0 else -100.0
+            if db < -50:
+                verdict = "VERY LOW — check mute/levels in Windows sound settings"
+            elif db < -40:
+                verdict = "low — consider speaking closer or raising the level"
+            else:
+                verdict = "good"
+            return f"Microphone level: {db:.1f} dB RMS ({verdict})."
+
+        self._run_diagnostic(self._btn_test_mic, work)
 
     # ---- Slots ----------------------------------------------------------
 
