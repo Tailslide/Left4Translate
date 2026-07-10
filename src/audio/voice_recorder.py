@@ -44,6 +44,10 @@ class VoiceRecorder:
         self.audio_data = []
         self.stream = None
         self.lock = threading.Lock()
+        # Live RMS level of the most recent callback block (dBFS). Read by
+        # the GUI meter; written only from the audio callback.
+        self.last_level_db: Optional[float] = None
+        self._callback_status: Optional[str] = None
         
         # Try to find the specified device or use default
         self._find_device()
@@ -271,7 +275,16 @@ class VoiceRecorder:
                 self.stream = None
                 
             self.recording = False
-            
+
+            # Report anything the realtime callback couldn't log itself.
+            if self._callback_status:
+                logger.warning(f"Audio stream reported: {self._callback_status}")
+                self._callback_status = None
+            if self.last_level_db is not None:
+                logger.info(f"Last block level: {self.last_level_db:.1f} dB RMS")
+                if self.last_level_db < -50:
+                    logger.warning("Audio level is very low. Check microphone and speak louder.")
+
             # Combine all audio chunks into a single array
             with self.lock:
                 if not self.audio_data:
@@ -288,54 +301,33 @@ class VoiceRecorder:
             return np.array([])
     
     def _audio_callback(self, indata, frames, time, status):
-        """
-        Callback function for audio stream.
-        
-        Args:
-            indata: Input audio data
-            frames: Number of frames
-            time: Stream time
-            status: Stream status
+        """PortAudio realtime callback.
+
+        Deliberately minimal: no logging or other blocking I/O in here —
+        sounddevice explicitly warns that blocking work inside the callback
+        can glitch or abort the stream host-side. Level/status reporting is
+        deferred to the consumer thread (see stop_recording).
         """
         if status:
-            logger.warning(f"Audio stream status: {status}")
-            
+            self._callback_status = str(status)
+
         # Make a copy of the data to avoid reference issues
         data = indata.copy()
-        
-        # Log audio levels periodically (every 5 callbacks to avoid excessive logging)
-        if len(self.audio_data) % 5 == 0:
-            # Calculate RMS value to estimate audio level
-            rms = np.sqrt(np.mean(np.square(data)))
-            peak = np.max(np.abs(data))
-            
-            # Convert to dB for easier interpretation
-            if rms > 0:
-                rms_db = 20 * np.log10(rms)
-            else:
-                rms_db = -100  # Arbitrary low value for silence
-                
-            if peak > 0:
-                peak_db = 20 * np.log10(peak)
-            else:
-                peak_db = -100
-                
-            logger.info(f"Audio levels - RMS: {rms_db:.1f} dB, Peak: {peak_db:.1f} dB")
-            
-            # Warn if audio level is too low
-            if rms_db < -50:
-                logger.warning("Audio level is very low. Check microphone and speak louder.")
-        
+
+        # Cheap running level for the GUI's live meter (a few microseconds).
+        rms = float(np.sqrt(np.mean(np.square(data))))
+        self.last_level_db = 20 * float(np.log10(rms)) if rms > 0 else -100.0
+
         # Add the data to our buffer
         with self.lock:
             self.audio_data.append(data)
-            
+
         # Call the data callback if provided
         if self.on_data_callback:
             try:
                 self.on_data_callback(data)
-            except Exception as e:
-                logger.error(f"Error in audio data callback: {e}")
+            except Exception:
+                pass  # consumer errors must not disturb the audio stream
     
     def is_recording(self) -> bool:
         """

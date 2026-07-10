@@ -1,9 +1,9 @@
 import sys
 import signal
 import logging
+import threading
 from pathlib import Path
 import os
-import time
 import argparse
 
 # Import all modules at top level (but only initialize logging when needed)
@@ -99,6 +99,7 @@ class Left4Translate:
         GUI because ``signal.signal`` only works on the main thread.
         """
         self.running = False
+        self._stop_event = threading.Event()
         self.mode = mode
         self._on_translation_cb = on_translation
         self._on_status_cb = on_status
@@ -311,6 +312,7 @@ class Left4Translate:
         try:
             self.logger.info(f"Starting Left4Translate v{__version__}...")
             self.running = True
+            self._stop_event.clear()
             self._emit_status("engine", "running")
 
             # Connect to screen (unless the hardware screen is disabled in config)
@@ -351,9 +353,10 @@ class Left4Translate:
             elif self.mode == 'voice':
                 self.logger.info("Left4Translate is running in voice translation mode only. Press Ctrl+C to stop.")
             
-            # Keep the main thread alive
-            while self.running:
-                time.sleep(1)
+            # Keep the main thread alive until stop() is called. An Event
+            # (rather than a poll loop) makes shutdown immediate instead of
+            # taking up to a second.
+            self._stop_event.wait()
             
         except Exception as e:
             self.logger.error(f"Error starting application: {e}")
@@ -362,6 +365,7 @@ class Left4Translate:
     def stop(self):
         """Stop the application."""
         self.running = False
+        self._stop_event.set()
         
         try:
             self.logger.info("Stopping Left4Translate...")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
@@ -155,6 +156,7 @@ class MainWindow(QMainWindow):
         self._controller.started.connect(self._on_started)
         self._controller.stopped.connect(self._on_stopped)
         self._controller.failed.connect(self._on_failed)
+        self._controller.start_rejected.connect(self._on_start_rejected)
 
         self.settings_tab.theme_changed.connect(self._on_theme_changed)
         self.settings_tab.config_saved.connect(self._on_config_saved)
@@ -237,6 +239,11 @@ class MainWindow(QMainWindow):
             self._status_bank.set_state(component, "idle", component.capitalize())
         self._show_status("Translation stopped")
 
+    def _on_start_rejected(self, message: str) -> None:
+        """Previous engine still winding down: restore the idle UI."""
+        self._set_ui_running(False)
+        self._show_status(message, 6000)
+
     def _on_failed(self, message: str) -> None:
         self._set_ui_running(False)
         self.dashboard_tab.set_running(False)
@@ -306,7 +313,15 @@ class MainWindow(QMainWindow):
 
     def _quit_application(self) -> None:
         self._force_quit = True
-        self.close()
+        self.close()  # closeEvent saves state and requests engine stop
         app = QApplication.instance()
-        if app is not None:
+        if app is None:
+            return
+        if not self._controller.is_running():
             app.quit()
+            return
+        # Give the engine a moment to wind down cleanly (serial port, log
+        # watcher), but never hang the quit: hard deadline via timer. The
+        # engine thread is a daemon, so process exit can't be held hostage.
+        self._controller.stopped.connect(app.quit)
+        QTimer.singleShot(3000, app.quit)

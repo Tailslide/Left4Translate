@@ -50,6 +50,9 @@ class EngineController(QObject):
     started = Signal()
     stopped = Signal()
     failed = Signal(str)
+    # Emitted when start() is refused because the previous engine thread is
+    # still winding down (prevents duplicated global mouse hooks / watchers).
+    start_rejected = Signal(str)
 
     def __init__(self, config_path: str, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -64,27 +67,36 @@ class EngineController(QObject):
         return self._thread is not None and self._thread.is_alive()
 
     def start(self, mode: str) -> None:
-        """Start the engine in ``mode`` (chat/voice/both). No-op if running."""
-        if self.is_running():
+        """Start the engine in ``mode`` (chat/voice/both).
+
+        Refused while a previous engine thread is still alive: that engine
+        still owns the global mouse hook, the log watcher, the serial port and
+        the audio stream — starting a second one would duplicate all of them
+        (a recipe for native crashes on Windows).
+        """
+        if self._thread is not None and self._thread.is_alive():
+            if self._engine is not None:
+                return  # plain double-start of a running engine: no-op
+            self.start_rejected.emit(
+                "The previous session is still stopping — try again in a moment."
+            )
             return
         self._thread = threading.Thread(
             target=self._run, args=(mode,), name="L4T-Engine", daemon=True
         )
         self._thread.start()
 
-    def stop(self, wait_ms: int = 4000) -> None:
-        """Ask the engine to stop and wait briefly for the thread to wind down."""
+    def stop(self) -> None:
+        """Ask the engine to stop. Non-blocking: never joins on the GUI
+        thread (a frozen window that gets killed looks like a silent crash).
+        The ``stopped`` signal fires when the thread actually winds down."""
         engine = self._engine
+        self._engine = None
         if engine is not None:
             try:
                 engine.stop()
             except Exception:
                 pass
-        thread = self._thread
-        if thread is not None and thread.is_alive():
-            thread.join(timeout=wait_ms / 1000.0)
-        self._thread = None
-        self._engine = None
 
     # ---- Live stats (polled from the GUI thread) ------------------------
 
@@ -101,7 +113,19 @@ class EngineController(QObject):
     def last_audio_level_db(self) -> Optional[float]:
         engine = self._engine
         voice = getattr(engine, "voice_manager", None) if engine else None
-        return getattr(voice, "last_audio_level", None) if voice else None
+        if voice is None:
+            return None
+        # While recording, the recorder publishes a per-block level — a live
+        # meter. Otherwise fall back to the last completed clip's level.
+        recorder = getattr(voice, "voice_recorder", None)
+        try:
+            if recorder is not None and recorder.is_recording():
+                live = getattr(recorder, "last_level_db", None)
+                if live is not None:
+                    return live
+        except Exception:
+            pass
+        return getattr(voice, "last_audio_level", None)
 
     # ---- Worker thread --------------------------------------------------
 
@@ -136,10 +160,14 @@ class EngineController(QObject):
         self._engine = engine
         self.started.emit()
         try:
-            engine.start()  # blocks until stop() flips engine.running
+            engine.start()  # blocks until stop() sets the engine's stop event
         except Exception as exc:
             self.failed.emit(f"Engine error: {exc}")
         finally:
+            # Clear refs before signalling so a stopped-handler that calls
+            # start() again isn't refused by our own stale references.
+            self._engine = None
+            self._thread = None
             self.stopped.emit()
 
     # ---- Engine callbacks (may run on non-GUI threads) ------------------
