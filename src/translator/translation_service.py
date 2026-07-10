@@ -10,6 +10,8 @@ import logging
 import re
 import html
 
+logger = logging.getLogger(__name__)
+
 # Network timeout for every Translation API call. Without one, a stalled
 # connection blocks the calling thread (chat reader / voice worker) forever.
 REQUEST_TIMEOUT_SECONDS = 10
@@ -41,7 +43,7 @@ class RateLimiter:
                 self.tokens -= 1
                 return True
 
-            logging.debug(f"Rate limiter: no tokens available ({self.tokens:.2f})")
+            logger.debug(f"Rate limiter: no tokens available ({self.tokens:.2f})")
             return False
 
 def is_undefined_language_error(e: requests.exceptions.HTTPError) -> bool:
@@ -210,11 +212,11 @@ class TranslationService:
                     user = json.load(fh)
                 if isinstance(user, dict):
                     merged.update({str(k).lower(): str(v) for k, v in user.items()})
-                    logging.info(f"Loaded {len(user)} slang overrides from {slang_path}")
+                    logger.info(f"Loaded {len(user)} slang overrides from {slang_path}")
                 else:
-                    logging.warning(f"Slang file {slang_path} must contain a JSON object")
+                    logger.warning(f"Slang file {slang_path} must contain a JSON object")
         except (OSError, json.JSONDecodeError) as e:
-            logging.warning(f"Could not load slang file {slang_path}: {e}")
+            logger.warning(f"Could not load slang file {slang_path}: {e}")
         return merged
 
     def _load_cache_file(self) -> None:
@@ -227,9 +229,9 @@ class TranslationService:
                 for key, value in stored.items():
                     if isinstance(value, list) and len(value) == 2:
                         self.cache[key] = (value[0], value[1])
-            logging.info(f"Loaded {len(stored)} cached translations from {self._cache_file}")
+            logger.info(f"Loaded {len(stored)} cached translations from {self._cache_file}")
         except (OSError, json.JSONDecodeError, ValueError) as e:
-            logging.warning(f"Could not load translation cache {self._cache_file}: {e}")
+            logger.warning(f"Could not load translation cache {self._cache_file}: {e}")
 
     def save_cache(self) -> None:
         """Persist the in-memory cache if a cache file is configured."""
@@ -241,9 +243,9 @@ class TranslationService:
             os.makedirs(os.path.dirname(os.path.abspath(self._cache_file)), exist_ok=True)
             with open(self._cache_file, "w", encoding="utf-8") as fh:
                 json.dump(snapshot, fh, ensure_ascii=False)
-            logging.info(f"Saved {len(snapshot)} cached translations to {self._cache_file}")
+            logger.info(f"Saved {len(snapshot)} cached translations to {self._cache_file}")
         except OSError as e:
-            logging.warning(f"Could not save translation cache: {e}")
+            logger.warning(f"Could not save translation cache: {e}")
         
     def _clean_text(self, text: str) -> str:
         """Remove color codes and other special characters."""
@@ -251,7 +253,7 @@ class TranslationService:
         cleaned = re.sub(r'\\x[0-9a-fA-F]{2}', '', text)
         # Then handle actual control characters
         cleaned = re.sub(r'[\x00-\x1F\x7F-\x9F]', '', cleaned)
-        logging.debug(f"Cleaned text: '{text}' -> '{cleaned}'")
+        logger.debug(f"Cleaned text: '{text}' -> '{cleaned}'")
         return cleaned
 
     def _get_slang_translations(self) -> dict:
@@ -296,18 +298,9 @@ class TranslationService:
                 # Keep original name but translate the slang term
                 name_part = ' '.join(words[:-1])
                 return f"{name_part} {name_slang_patterns[last_word]}", True
-        
-        # First check for exact matches
-        if lower_text in slang_dict:
-            return slang_dict[lower_text], True
-            
-        # Then check if it's a single word
-        if ' ' not in lower_text:
-            # If it's a single word and it's in our slang dictionary, translate it
-            if lower_text in slang_dict:
-                return slang_dict[lower_text], True
-            
+
         # Don't translate slang words that are part of larger phrases
+        # (the exact-match lookup above already covered whole-phrase slang).
         return text, False
 
     def _preprocess_text(self, text: str) -> str:
@@ -367,12 +360,12 @@ class TranslationService:
         # check, which would otherwise swallow short slang like "si" or "f".
         slang_translated, was_slang = self._translate_slang(cleaned_text)
         if was_slang:
-            logging.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
+            logger.debug(f"Used slang translation: '{cleaned_text}' -> '{slang_translated}'")
             return slang_translated, 'es'
 
         # Skip translation for untranslatable content
         if is_untranslatable_content(cleaned_text):
-            logging.debug(f"Skipping translation for untranslatable content: '{text}'")
+            logger.debug(f"Skipping translation for untranslatable content: '{text}'")
             return text, None
 
         # Resolve the source language: caller-provided, else the cheap local
@@ -397,7 +390,7 @@ class TranslationService:
                 if time.monotonic() >= deadline:
                     # Degrade gracefully: showing the original text beats
                     # stalling the reader/voice thread behind one message.
-                    logging.warning(
+                    logger.warning(
                         "Rate limit wait budget exhausted; showing original text"
                     )
                     return text, None
@@ -409,7 +402,7 @@ class TranslationService:
                 if source_base:
                     data['source'] = source_base
 
-                logging.debug(f"Translation request: target={target_lang} source={source_base or 'auto'} len={len(text)}")
+                logger.debug(f"Translation request: target={target_lang} source={source_base or 'auto'} len={len(text)}")
 
                 response = requests.post(
                     self.base_url,
@@ -419,8 +412,8 @@ class TranslationService:
                     timeout=REQUEST_TIMEOUT_SECONDS,
                 )
                 if response.status_code != 200:
-                    logging.error(f"Translation API error - Status: {response.status_code}")
-                    logging.error(f"Response content: {response.text}")
+                    logger.error(f"Translation API error - Status: {response.status_code}")
+                    logger.error(f"Response content: {response.text}")
                     response.raise_for_status()
 
                 payload = response.json()['data']['translations'][0]
@@ -442,17 +435,17 @@ class TranslationService:
             except requests.exceptions.HTTPError as e:
                 # If it's an undefined language error, return original text immediately
                 if is_undefined_language_error(e):
-                    logging.debug(f"Undefined source language, returning original: '{text}'")
+                    logger.debug(f"Undefined source language, returning original: '{text}'")
                     return text, None
 
                 attempts += 1
-                logging.error(f"HTTP Error on attempt {attempts}: {str(e)}")
+                logger.error(f"HTTP Error on attempt {attempts}: {str(e)}")
                 if attempts >= self.retry_attempts:
                     raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
                 time.sleep(1)  # Wait before retry
             except Exception as e:
                 attempts += 1
-                logging.error(f"Unexpected error on attempt {attempts}: {str(e)}")
+                logger.error(f"Unexpected error on attempt {attempts}: {str(e)}")
                 if attempts >= self.retry_attempts:
                     raise Exception(f"Translation failed after {attempts} attempts: {e}") from e
                 time.sleep(1)  # Wait before retry
@@ -499,8 +492,8 @@ class TranslationService:
                 return preprocessed
                 
             data = {'q': cleaned_text}
-            logging.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
-            logging.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
+            logger.debug(f"Language detection request - Text length: {len(cleaned_text)} characters")
+            logger.debug("Detection request data: " + ", ".join(f"{k}: {v}" for k, v in data.items()))
 
             # Apply rate limiting before making the API call, with a
             # deadline so a drained bucket can't stall the caller forever.
@@ -519,22 +512,22 @@ class TranslationService:
             )
 
             if response.status_code != 200:
-                logging.error(f"Language detection API error - Status: {response.status_code}")
-                logging.error(f"Response content: {response.text}")
-                logging.error(f"Request URL: {response.url}")
+                logger.error(f"Language detection API error - Status: {response.status_code}")
+                logger.error(f"Response content: {response.text}")
+                logger.error(f"Request URL: {response.url}")
                 response.raise_for_status()
 
             result = response.json()
             detected_lang = result['data']['detections'][0][0]['language']
             confidence = result['data']['detections'][0][0].get('confidence', 0)
-            logging.debug(f"Detected language: {detected_lang} with confidence: {confidence}")
+            logger.debug(f"Detected language: {detected_lang} with confidence: {confidence}")
             return detected_lang
 
         except requests.exceptions.HTTPError as e:
-            logging.error(f"HTTP Error during language detection: {str(e)}")
+            logger.error(f"HTTP Error during language detection: {str(e)}")
             raise  # Re-raise the error to be handled by the translate method
         except Exception as e:
-            logging.error(f"Unexpected error during language detection: {str(e)}")
+            logger.error(f"Unexpected error during language detection: {str(e)}")
             raise Exception(f"Language detection failed: {e}") from e
             
     def clear_cache(self):

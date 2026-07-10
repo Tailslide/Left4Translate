@@ -164,16 +164,12 @@ class GameLogHandler(FileSystemEventHandler):
             if line.startswith(prefix):
                 return True
                 
-        # Only then check if it matches chat pattern
-        # Chat messages have a specific format:
-        # 1. Team chat: "(Survivor|Infected) ♥Name : message"
-        # 2. Regular chat: "Name : message"
-        # Use .+? (not [^:]+) so player names containing colons still match;
-        # the \s+:\s+ around the separator is what disambiguates name from message.
-        chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?.+?\s+:\s+.+'
-        if re.match(chat_pattern, line):
+        # Only then check against the configured chat pattern — the same one
+        # _process_line parses with, so the two stages can never disagree
+        # about what counts as chat (they previously used separate regexes).
+        if self.message_pattern.match(line):
             return False
-                
+
         return True  # Default to treating unknown formats as system messages
             
     def _clean_text(self, text: Optional[str]) -> Optional[str]:
