@@ -2,7 +2,6 @@
 Mouse input handler for voice translation feature.
 """
 import logging
-import threading
 from typing import Callable, List, Optional
 from pynput import mouse
 
@@ -37,6 +36,11 @@ class MouseHandler:
         self.on_press_callback = on_press_callback
         self.on_release_callback = on_release_callback
         self.modifier_keys = modifier_keys or []
+        if self.modifier_keys:
+            logger.warning(
+                "trigger_button.modifier_keys is not implemented; the trigger "
+                "fires regardless of held keys"
+            )
         
         # Map button string to pynput button object
         self.button_map = {

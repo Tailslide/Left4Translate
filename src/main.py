@@ -1,9 +1,9 @@
 import sys
 import signal
 import logging
+import threading
 from pathlib import Path
 import os
-import time
 import argparse
 
 # Import all modules at top level (but only initialize logging when needed)
@@ -13,7 +13,7 @@ from translator.translation_service import TranslationService
 from display.screen_controller import ScreenController
 from audio.voice_translation_manager import VoiceTranslationManager
 
-__version__ = "1.2.7"  # Updated version with chat message display fix
+from version import __version__  # single-sourced; bumped in src/version.py
 
 
 def get_executable_dir():
@@ -70,9 +70,17 @@ def main():
     # Resolve config path before setting up logging
     exe_dir = get_executable_dir()
     config_path = resolve_config_path(args, exe_dir)
-    
-    # Set up logging first
-    logger = setup_logging(config_path)
+
+    # Set up logging first. A missing/broken config must produce the friendly
+    # setup instructions, not a raw traceback from the logging bootstrap.
+    try:
+        setup_logging(config_path)
+    except (FileNotFoundError, ValueError, KeyError) as e:
+        print(f"\nCould not read configuration ({e}). Please:")
+        print("1. Copy config.sample.json to config.json")
+        print("2. Add your Google Cloud Translation API key")
+        print("3. Configure your screen settings")
+        sys.exit(1)
     
     # Run the application
     app = Left4Translate(config_path, args.mode)
@@ -99,6 +107,7 @@ class Left4Translate:
         GUI because ``signal.signal`` only works on the main thread.
         """
         self.running = False
+        self._stop_event = threading.Event()
         self.mode = mode
         self._on_translation_cb = on_translation
         self._on_status_cb = on_status
@@ -169,13 +178,20 @@ class Left4Translate:
             trans_config = self.config_manager.get_translation_config()
             screen_config = self.config_manager.get_screen_config()
             
-            # Initialize translation service
+            # Initialize translation service. Slang overrides and the
+            # persistent cache live next to the config file.
+            config_dir = os.path.dirname(str(self.config_manager.config_path))
+            cache_file = None
+            if self.config_manager.get_setting("translation.persistCache", False):
+                cache_file = os.path.join(config_dir, "translation_cache.json")
             self.translator = TranslationService(
                 api_key=trans_config.api_key,
                 target_language=trans_config.target_language,
                 cache_size=trans_config.cache_size,
                 rate_limit_per_minute=trans_config.rate_limit_per_minute,
-                retry_attempts=trans_config.retry_attempts
+                retry_attempts=trans_config.retry_attempts,
+                slang_path=os.path.join(config_dir, "slang_es.json"),
+                cache_file=cache_file
             )
             
             # Whether the physical Turing Smart Screen is in use. When disabled,
@@ -191,7 +207,8 @@ class Left4Translate:
                 max_messages=screen_config.display.get("maxMessages", 5),
                 message_timeout=screen_config.display.get("messageTimeout", 10000),
                 margin=screen_config.display.get("layout", {}).get("margin", 5),
-                spacing=screen_config.display.get("layout", {}).get("spacing", 2)
+                spacing=screen_config.display.get("layout", {}).get("spacing", 2),
+                app_version=__version__
             )
             
             # Initialize chat message reader if mode is 'chat' or 'both'
@@ -216,7 +233,8 @@ class Left4Translate:
                     config=config_dict,
                     translation_service=self.translator,
                     screen_controller=self.screen,
-                    on_translation_callback=self._handle_voice_translation
+                    on_translation_callback=self._handle_voice_translation,
+                    on_status_callback=self._handle_voice_status
                 )
             else:
                 if self.mode in ['voice', 'both'] and not voice_enabled:
@@ -243,22 +261,15 @@ class Left4Translate:
                 return
             
             self.logger.info(f"New message from {player_name}: {chat_message}")
-            
+
             try:
-                # Detect and translate message
-                source_lang = self.translator.detect_language(chat_message)
-                
-                # Only translate if not already in target language
-                if source_lang != self.config_manager.get_translation_config().target_language:
-                    translated = self.translator.translate(
-                        chat_message,
-                        source_language=source_lang
-                    )
-                else:
-                    translated = chat_message
+                # One API round-trip: the translate endpoint auto-detects the
+                # source language and skips translation when the text is
+                # already in the target language.
+                translated, source_lang = self.translator.translate_with_detection(chat_message)
             except Exception as e:
                 self.logger.error(f"Translation error: {e}")
-                translated = chat_message  # Use original message if translation fails
+                translated, source_lang = chat_message, None  # Show original on failure
             
             # Display message on the Turing screen (only when the hardware screen
             # is enabled). This is best-effort: a screen error must never stop the
@@ -286,11 +297,15 @@ class Left4Translate:
                 "original": chat_message,
                 "translated": translated,
                 "team": team_type,
-                "source_language": locals().get("source_lang"),
+                "source_language": source_lang,
             })
 
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
+
+    def _handle_voice_status(self, state: str, detail: str = ""):
+        """Forward voice pipeline state (recording/transcribing/armed) to observers."""
+        self._emit_status("voice", state, detail)
 
     def _handle_voice_translation(self, transcript: str, translated: str):
         """Receive a completed voice translation and forward it to observers."""
@@ -313,6 +328,7 @@ class Left4Translate:
         try:
             self.logger.info(f"Starting Left4Translate v{__version__}...")
             self.running = True
+            self._stop_event.clear()
             self._emit_status("engine", "running")
 
             # Connect to screen (unless the hardware screen is disabled in config)
@@ -353,9 +369,10 @@ class Left4Translate:
             elif self.mode == 'voice':
                 self.logger.info("Left4Translate is running in voice translation mode only. Press Ctrl+C to stop.")
             
-            # Keep the main thread alive
-            while self.running:
-                time.sleep(1)
+            # Keep the main thread alive until stop() is called. An Event
+            # (rather than a poll loop) makes shutdown immediate instead of
+            # taking up to a second.
+            self._stop_event.wait()
             
         except Exception as e:
             self.logger.error(f"Error starting application: {e}")
@@ -364,6 +381,7 @@ class Left4Translate:
     def stop(self):
         """Stop the application."""
         self.running = False
+        self._stop_event.set()
         
         try:
             self.logger.info("Stopping Left4Translate...")
@@ -377,6 +395,12 @@ class Left4Translate:
 
             if self.screen_enabled:
                 self.screen.disconnect()
+
+            # Persist the translation cache if enabled (translation.persistCache).
+            try:
+                self.translator.save_cache()
+            except Exception as e:
+                self.logger.debug(f"Cache save skipped: {e}")
 
             self.logger.info("Left4Translate stopped")
             self._emit_status("screen", "disconnected")

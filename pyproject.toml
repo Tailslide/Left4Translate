@@ -5,10 +5,36 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "left4translate"
 version = "1.2.7"
-description = "Real-time chat translation for Left 4 Dead 2"
+description = "Real-time chat and voice translation for Left 4 Dead 2, shown on a Turing Smart Screen or an on-screen overlay"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
+keywords = ["left4dead2", "translation", "gaming", "turing-smart-screen"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: tests that call real external APIs (deselected by default in CI)",
+    "hardware: tests that need physical hardware (Turing screen, microphone)",
+]
+addopts = "-m 'not live and not hardware'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+src = ["src", "gui", "tests"]
+
+[tool.ruff.lint]
+# Start with correctness-focused rules; expand once the codebase is clean.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+    "E731",  # lambda assignments are used deliberately in the GUI wiring
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Standalone diagnostic scripts, not library code.
+"src/tools/*" = ["E402", "F401", "F841"]
+"tests/*" = ["E402"]
 
 [tool.bumpversion]
 current_version = "1.2.7"
@@ -17,11 +43,21 @@ tag = false
 message = "Bump version: {current_version} → {new_version} [skip ci]"
 
 [[tool.bumpversion.files]]
-filename = "src/main.py"
+filename = "src/version.py"
 search = '__version__ = "{current_version}"'
 replace = '__version__ = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
 
 [[tool.bumpversion.files]]
 filename = "README.md"
 search = "v{current_version}"
 replace = "v{new_version}"
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "version-{current_version}-blue"
+replace = "version-{new_version}-blue"

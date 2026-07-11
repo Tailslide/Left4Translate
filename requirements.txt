@@ -9,7 +9,6 @@ pyserial>=3.5
 
 # Google Cloud APIs
 google-cloud-speech>=2.31.0
-google-cloud-translate>=3.19.0
 
 # Display/PIL
 Pillow>=12.0.0

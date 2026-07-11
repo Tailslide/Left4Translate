@@ -33,14 +33,14 @@ def main():
         # Test the slang translation
         translated, was_slang = translator._translate_slang(player)
         if was_slang:
-            print(f"\nPlayer name translation:")
+            print("\nPlayer name translation:")
             print(f"Original: {player}")
             print(f"Translated: {translated}")
             
         # Test content translation
         translated, was_slang = translator._translate_slang(content)
         if was_slang:
-            print(f"\nContent translation:")
+            print("\nContent translation:")
             print(f"Original: {content}")
             print(f"Translated: {translated}")
         

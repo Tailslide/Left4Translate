@@ -44,6 +44,7 @@ class SettingsStore:
     KEY_OVERLAY_VISIBLE = "overlay/visible"
     KEY_OVERLAY_GEOMETRY = "overlay/geometry"
     KEY_OVERLAY_OPACITY = "overlay/opacity"
+    KEY_OVERLAY_FONT_SIZE = "overlay/font_size"
 
     DEFAULT_THEME = THEME_DARK
     DEFAULT_MODE = "both"
@@ -52,6 +53,7 @@ class SettingsStore:
     DEFAULT_START_MINIMIZED = False
     DEFAULT_OVERLAY_VISIBLE = False
     DEFAULT_OVERLAY_OPACITY = 0.9
+    DEFAULT_OVERLAY_FONT_SIZE = 13
 
     def __init__(self, qsettings: Optional[QSettings] = None) -> None:
         self._settings = qsettings if qsettings is not None else QSettings()
@@ -154,3 +156,13 @@ class SettingsStore:
 
     def set_overlay_opacity(self, value: float) -> None:
         self._settings.setValue(self.KEY_OVERLAY_OPACITY, float(value))
+
+    def overlay_font_size(self) -> int:
+        try:
+            value = int(self._settings.value(self.KEY_OVERLAY_FONT_SIZE, self.DEFAULT_OVERLAY_FONT_SIZE))
+        except (TypeError, ValueError):
+            return self.DEFAULT_OVERLAY_FONT_SIZE
+        return min(24, max(9, value))
+
+    def set_overlay_font_size(self, value: int) -> None:
+        self._settings.setValue(self.KEY_OVERLAY_FONT_SIZE, int(value))

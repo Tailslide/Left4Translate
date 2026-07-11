@@ -13,10 +13,11 @@ from collections import deque
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -49,7 +50,7 @@ class DashboardTab(QWidget):
         root.setSpacing(14)
 
         root.addLayout(self._build_cards())
-        root.addWidget(self._section_label("Live Translations"))
+        root.addLayout(self._build_feed_header())
         root.addWidget(self._build_feed(), stretch=1)
 
         # One timer drives the time-based cards (uptime, per-minute) and the
@@ -79,6 +80,24 @@ class DashboardTab(QWidget):
         label.setObjectName("SectionTitle")
         return label
 
+    def _build_feed_header(self) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.addWidget(self._section_label("Live Translations"))
+        row.addStretch(1)
+        self._wrap_check = QCheckBox("Wrap long messages")
+        self._wrap_check.setChecked(False)
+        self._wrap_check.toggled.connect(self._on_wrap_toggled)
+        row.addWidget(self._wrap_check)
+        return row
+
+    def _on_wrap_toggled(self, checked: bool) -> None:
+        self._feed.setWordWrap(checked)
+        if checked:
+            self._feed.resizeRowsToContents()
+        else:
+            for r in range(self._feed.rowCount()):
+                self._feed.setRowHeight(r, self._feed.verticalHeader().defaultSectionSize())
+
     def _build_feed(self) -> QTableWidget:
         table = QTableWidget(0, 5)
         table.setHorizontalHeaderLabels(["Time", "Type", "Player", "Original", "Translated"])
@@ -97,7 +116,30 @@ class DashboardTab(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         self._feed = table
+
+        # Centered hint shown while the feed is empty.
+        self._empty_hint = QLabel(
+            "No translations yet.\nStart the engine and join a game — chat will appear here.",
+            table,
+        )
+        self._empty_hint.setObjectName("EmptyHint")
+        self._empty_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        table.installEventFilter(self)
+        self._position_empty_hint()
         return table
+
+    def eventFilter(self, obj, event):  # type: ignore[override]
+        if obj is self._feed and event.type() == QEvent.Type.Resize:
+            self._position_empty_hint()
+        return super().eventFilter(obj, event)
+
+    def _position_empty_hint(self) -> None:
+        if self._empty_hint is not None:
+            self._empty_hint.resize(self._feed.viewport().size())
+            self._empty_hint.move(0, self._feed.horizontalHeader().height())
+
+    def _update_empty_hint(self) -> None:
+        self._empty_hint.setVisible(self._feed.rowCount() == 0)
 
     # ---- Public slots ---------------------------------------------------
 
@@ -133,6 +175,9 @@ class DashboardTab(QWidget):
 
         if self._feed.rowCount() > _MAX_FEED_ROWS:
             self._feed.removeRow(self._feed.rowCount() - 1)
+        if self._wrap_check.isChecked():
+            self._feed.resizeRowToContents(0)
+        self._update_empty_hint()
 
         self._card_total.set_value(f"{self._count:,}")
         self._card_chars.set_value(f"{self._chars:,}")
@@ -153,6 +198,7 @@ class DashboardTab(QWidget):
         self._chars = 0
         self._recent.clear()
         self._feed.setRowCount(0)
+        self._update_empty_hint()
         self._card_total.set_value("0")
         self._card_chars.set_value("0")
         self._card_cache.set_value("—")

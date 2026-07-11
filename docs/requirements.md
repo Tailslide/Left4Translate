@@ -10,7 +10,7 @@
 - Internet connection for translation services
 
 ### Software
-- Python 3.8 or higher
+- Python 3.10 – 3.13 (3.11 recommended)
 - Left 4 Dead game installation
 - USB serial drivers (typically built into OS)
 - Git (for development)
@@ -18,22 +18,22 @@
 ## Dependencies
 
 ### Python Packages
-- turing-smart-screen-python: Screen communication
-- watchdog: File system monitoring
-- requests: HTTP client for translation API
-- python-i18n: Internationalization support
-- pydantic: Data validation and configuration
-- pyserial: Serial communication
-- cachetools: LRU cache implementation
-- python-dotenv: Environment variable management
-- structlog: Structured logging
+See `requirements.txt` for pinned minimums. Direct dependencies:
+- watchdog: file system monitoring (game log)
+- requests: HTTP client for the Translation REST API
+- cachetools: LRU translation cache
+- pyserial: Turing Smart Screen serial communication
+- Pillow: display rendering
+- google-cloud-speech: voice transcription
+- numpy + sounddevice: audio capture
+- pynput: push-to-talk mouse hook
+- pyperclip: clipboard
+- PySide6: desktop GUI (not needed for the console app)
 
 ### Development Dependencies
-- pytest: Testing framework
-- black: Code formatting
-- mypy: Static type checking
-- pylint: Code analysis
-- coverage: Test coverage reporting
+- pytest: testing framework (suite in `tests/`)
+- ruff: linting (configured in `pyproject.toml`, enforced in CI)
+- pyinstaller: executable builds
 
 ## Configuration Requirements
 

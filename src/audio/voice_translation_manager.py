@@ -3,7 +3,6 @@ Voice translation manager for voice translation feature.
 """
 import logging
 import threading
-import time
 import numpy as np
 from typing import Optional, Dict, Any, Callable
 
@@ -34,7 +33,8 @@ class VoiceTranslationManager:
         config: Dict[str, Any],
         translation_service: TranslationService,
         screen_controller = None,
-        on_translation_callback: Optional[Callable[[str, str], None]] = None
+        on_translation_callback: Optional[Callable[[str, str], None]] = None,
+        on_status_callback: Optional[Callable[[str, str], None]] = None
     ):
         """
         Initialize the voice translation manager.
@@ -49,6 +49,7 @@ class VoiceTranslationManager:
         self.translation_service = translation_service
         self.screen_controller = screen_controller
         self.on_translation_callback = on_translation_callback
+        self.on_status_callback = on_status_callback
         
         # Extract configuration
         voice_config = config.get("voice_translation", {})
@@ -64,6 +65,16 @@ class VoiceTranslationManager:
         
         logger.info("Voice translation manager initialized")
     
+    def _emit_status(self, state: str, detail: str = "") -> None:
+        """Report a state change (recording/transcribing/armed) - best-effort."""
+        callback = getattr(self, "on_status_callback", None)
+        if callback is None:
+            return
+        try:
+            callback(state, detail)
+        except Exception as e:  # observers must never break the pipeline
+            logger.debug(f"on_status observer error: {e}")
+
     def _init_components(self, config: Dict[str, Any]) -> None:
         """
         Initialize voice translation components.
@@ -104,10 +115,11 @@ class VoiceTranslationManager:
             format=clipboard_config.get("format", "both")
         )
         
-        # Translation settings
+        # Translation settings. ``config`` here is already the
+        # ``voice_translation`` section, so its translation options live at
+        # ``config["translation"]`` — not under another nested key.
         translation_config = config.get("translation", {})
-        voice_translation_config = config.get("voice_translation", {}).get("translation", {})
-        self.target_language = voice_translation_config.get("target_language", "es")
+        self.target_language = translation_config.get("target_language", "es")
         
         # Display settings
         display_config = config.get("display", {})
@@ -213,8 +225,10 @@ class VoiceTranslationManager:
             logger.info("Attempting to start voice recording...")
             if self.voice_recorder.start_recording():
                 logger.info("Successfully started recording on button press")
+                self._emit_status("recording")
             else:
                 logger.error("Failed to start recording on button press")
+                self._emit_status("error", "Could not start recording")
             
         except Exception as e:
             logger.error(f"Error handling button press: {e}")
@@ -238,10 +252,24 @@ class VoiceTranslationManager:
                 logger.warning("No audio data recorded - recording may have failed")
                 return
                 
-            logger.info(f"Recorded {len(audio_data)} audio samples ({len(audio_data)/self.voice_recorder.sample_rate:.2f} seconds)")
+            duration = len(audio_data) / self.voice_recorder.sample_rate
+            logger.info(f"Recorded {len(audio_data)} audio samples ({duration:.2f} seconds)")
+
+            # Accidental taps produce sub-300ms clips that only waste an API
+            # call; the synchronous recognize endpoint also rejects clips
+            # near a minute, so cap at 55s (keeping the most recent audio).
+            if duration < 0.3:
+                logger.info("Clip shorter than 0.3s - ignoring accidental tap")
+                self._emit_status("armed")
+                return
+            max_samples = int(55 * self.voice_recorder.sample_rate)
+            if len(audio_data) > max_samples:
+                logger.warning(f"Clip of {duration:.1f}s exceeds the 55s limit - keeping the last 55s")
+                audio_data = audio_data[-max_samples:]
             
             # Process in a separate thread to avoid blocking
             logger.info("Starting audio processing in separate thread")
+            self._emit_status("transcribing")
             threading.Thread(
                 target=self._process_audio,
                 args=(audio_data,),
@@ -339,7 +367,10 @@ class VoiceTranslationManager:
             logger.error(f"Error processing audio: {e}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-    
+        finally:
+            # Back to push-to-talk-ready regardless of outcome.
+            self._emit_status("armed")
+
     def update_config(self, config: Dict[str, Any]) -> None:
         """
         Update configuration.

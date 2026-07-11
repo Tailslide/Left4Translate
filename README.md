@@ -4,7 +4,7 @@ Real-time chat and voice translation for Left 4 Dead 2, displaying translated me
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.2.6-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.7-blue.svg)](https://github.com/yourusername/Left4Translate)
 
 Available as both a **console app** and a **full Windows desktop GUI** (with a
 live translation feed, system-tray support, and an in-app config editor — see
@@ -34,33 +34,11 @@ This separation allows the display hardware logic to be reused in other projects
 
 ## Changelog
 
-### Unreleased
-- Added an **always-on-top translation overlay** — a software stand-in for the
-  Turing Smart Screen. Toggle it from the **Overlay** button in the GUI header.
-  It floats over a borderless/windowed game without stealing keyboard focus
-  (uses `WS_EX_NOACTIVATE` on Windows), is draggable/resizable, has adjustable
-  opacity, and mirrors the Turing screen's styling and colors.
-- Added a `screen.enabled` config flag (and a **Use hardware Turing screen**
-  toggle in Settings) so you can run with no Turing hardware at all — the engine
-  skips the serial connection and feeds translations to the overlay instead.
-
-### v1.2.7
-- Refactored display module to separate reusable TuringDisplay library from Left4Translate-specific ScreenController
-- TuringDisplay now supports multiple hardware revisions (Rev A, B, C, D)
-- Added text wrapping, font loading, and drawing helpers to reusable library
-- Fixed issue where chat messages weren't showing on the Turing screen at startup
-- Added "Registered" to system message prefixes to properly filter out system messages
-- Fixed message processing to correctly handle both team chat and regular chat formats
-- Improved message filtering to ensure only actual chat messages are displayed
-
-### v1.2.1
-- Fixed voice translation error: Corrected parameter name mismatch in TranslationService.translate() call
-- Voice translation now correctly passes source_language instead of target_language parameter
-- Fixed target language configuration in voice translation manager to use the correct configuration section
-- Changed default clipboard format to only copy translated text instead of both original and translated
-
-### v1.2.0
-- Initial release with voice translation feature
+See [CHANGELOG.md](CHANGELOG.md). Highlights of the unreleased work: crash
+reporting (no more silent exits), settings dropdowns with one-click
+diagnostics (Test translation / screen / microphone), a real light theme,
+fixes for voice target language, short-slang translation, log truncation on
+game restart, and on-screen message expiry.
 
 ## Features
 
@@ -390,13 +368,22 @@ To run the complete test suite:
    source venv/bin/activate # Linux/Mac
    ```
 2. Install pytest: `pip install pytest`
-3. Run the tests: `python -m pytest src/tools/ -v`
+3. Run the tests: `python -m pytest`
 
-For running all tests in the project, use:
+The suite lives in `tests/` (configured via `pyproject.toml`); tests that need
+live APIs or physical hardware are marked `live` / `hardware` and deselected
+by default. The standalone diagnostic scripts remain in `src/tools/`.
+
+**Continuous integration:** a ready-to-use GitHub Actions workflow (pytest +
+ruff on Linux and Windows) lives at [`ci/github-actions-ci.yml`](ci/github-actions-ci.yml).
+It could not be installed automatically (pushing workflow files needs a token
+with `workflow` scope) — to enable it, move the file to
+`.github/workflows/ci.yml` and commit:
+
 ```bash
-python -m pytest --ignore=turing-smart-screen-python
+git mv ci/github-actions-ci.yml .github/workflows/ci.yml
+git commit -m "Enable CI workflow"
 ```
-(The `--ignore` flag is needed to skip tests in the external turing-smart-screen-python dependency that require additional dependencies)
 
 The test suite includes:
 - Chat message pattern matching
@@ -487,6 +474,32 @@ The application supports various chat message formats:
 - Messages with emojis and special characters
 
 Note: Due to limitations in Left 4 Dead 2's console logging system, chat messages from players with certain Unicode or special characters in their names may not be written to the console.log file at all. This is a game engine limitation and not an issue with the translation system. The game supports displaying these characters in-game, but they may not be captured in the log file for translation.
+
+## Troubleshooting
+
+- **The app closed by itself / crashed silently.** Check `logs/app.log` and
+  `logs/crash.log` next to the executable — every crash now leaves a stack
+  trace there. Please attach both files when reporting an issue.
+- **No chat translations appear.** In L4D2, enable logging with
+  `con_logfile console.log` (or launch options `-condebug -conclearlog`), and
+  confirm the **Game → console.log path** in Settings points at that file. The
+  reader survives game restarts and log truncation automatically.
+- **"Could not connect to screen."** Use **Settings → Turing Screen → Serial
+  port** (the dropdown lists detected COM ports; hit ↻ after plugging in) and
+  then **Diagnostics → Test screen**. If you have no Turing hardware, uncheck
+  *Use hardware Turing screen* and use the **Overlay** button instead.
+- **Voice recognition fails or hears nothing.** Run **Diagnostics → Test
+  microphone**. Very low levels (< −50 dB) usually mean the wrong input device
+  is selected (pick it from the dropdown) or the mic is muted in Windows sound
+  settings. Also confirm the Speech-to-Text credentials JSON path is set.
+- **Translation errors / HTTP 403.** Run **Diagnostics → Test translation**.
+  A 403 usually means the API key is invalid, restricted to the wrong API, or
+  over quota (the free tier is 500,000 characters/month; enable
+  `translation.persistCache` to stretch it).
+- **The overlay is invisible in game.** True *exclusive* fullscreen paints
+  over everything; run L4D2 in borderless/windowed-fullscreen.
+- **A second copy won't open.** That's intentional — the running instance's
+  window is brought to the front instead.
 
 ## Contributing
 

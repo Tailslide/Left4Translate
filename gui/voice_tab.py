@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from gui.engine_controller import EngineController
-from gui.styles import TEXT_SECONDARY, VOICE_ACCENT
+from gui.styles import VOICE_ACCENT
 from gui.widgets import StatusPill
 
 # Map a useful slice of the dBFS range onto the meter.
@@ -144,6 +144,7 @@ class VoiceTab(QWidget):
         text = {
             "armed": "Armed — hold trigger to talk",
             "recording": "Recording…",
+            "transcribing": "Transcribing…",
             "error": detail or "Voice error",
             "idle": "Voice idle",
         }.get(state, detail or state.capitalize())

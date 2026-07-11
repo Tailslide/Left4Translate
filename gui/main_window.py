@@ -5,13 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication,
-    QComboBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QStatusBar,
     QTabWidget,
@@ -28,7 +29,7 @@ from gui.settings_tab import SettingsTab
 from gui.theme import apply_theme
 from gui.tray import TrayIcon, is_tray_available
 from gui.voice_tab import VoiceTab
-from gui.widgets import StatusBank
+from gui.widgets import NoScrollComboBox, StatusBank
 
 _logger = logging.getLogger("left4translate.gui")
 
@@ -53,6 +54,7 @@ class MainWindow(QMainWindow):
         self._controller = controller or EngineController(config_path, parent=self)
         self._force_quit = False
         self._running = False
+        self._restart_pending = False
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -86,7 +88,7 @@ class MainWindow(QMainWindow):
         title.setObjectName("AppTitle")
         row.addWidget(title)
 
-        self._mode_combo = QComboBox()
+        self._mode_combo = NoScrollComboBox()
         for mode in MODES:
             self._mode_combo.addItem(mode.capitalize(), mode)
         idx = self._mode_combo.findData(self._store.mode())
@@ -156,6 +158,7 @@ class MainWindow(QMainWindow):
         self._controller.started.connect(self._on_started)
         self._controller.stopped.connect(self._on_stopped)
         self._controller.failed.connect(self._on_failed)
+        self._controller.start_rejected.connect(self._on_start_rejected)
 
         self.settings_tab.theme_changed.connect(self._on_theme_changed)
         self.settings_tab.config_saved.connect(self._on_config_saved)
@@ -237,6 +240,15 @@ class MainWindow(QMainWindow):
         for component in _STATUS_COMPONENTS:
             self._status_bank.set_state(component, "idle", component.capitalize())
         self._show_status("Translation stopped")
+        if self._restart_pending:
+            # Config-saved restart: the old engine is fully down, start anew.
+            self._restart_pending = False
+            self._toggle_engine()
+
+    def _on_start_rejected(self, message: str) -> None:
+        """Previous engine still winding down: restore the idle UI."""
+        self._set_ui_running(False)
+        self._show_status(message, 6000)
 
     def _on_failed(self, message: str) -> None:
         self._set_ui_running(False)
@@ -254,6 +266,7 @@ class MainWindow(QMainWindow):
         self._start_button.style().unpolish(self._start_button)
         self._start_button.style().polish(self._start_button)
         self._mode_combo.setEnabled(not running)
+        self.settings_tab.set_engine_running(running)
         if self._tray is not None:
             self._tray.set_running(running)
 
@@ -266,8 +279,21 @@ class MainWindow(QMainWindow):
 
     def _on_config_saved(self, config: dict) -> None:
         self.voice_tab.set_config(config)
-        if self._running:
-            self._show_status("Config saved — Stop and Start to apply changes.", 6000)
+        if not self._running:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Apply settings",
+            "Settings saved. Restart translation now to apply them?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._restart_pending = True
+            self._show_status("Restarting translation…")
+            self._controller.stop()
+        else:
+            self._show_status("Config saved — will apply on the next Start.", 6000)
 
     # ---- Window / lifecycle ---------------------------------------------
 
@@ -307,7 +333,15 @@ class MainWindow(QMainWindow):
 
     def _quit_application(self) -> None:
         self._force_quit = True
-        self.close()
+        self.close()  # closeEvent saves state and requests engine stop
         app = QApplication.instance()
-        if app is not None:
+        if app is None:
+            return
+        if not self._controller.is_running():
             app.quit()
+            return
+        # Give the engine a moment to wind down cleanly (serial port, log
+        # watcher), but never hang the quit: hard deadline via timer. The
+        # engine thread is a daemon, so process exit can't be held hostage.
+        self._controller.stopped.connect(app.quit)
+        QTimer.singleShot(3000, app.quit)

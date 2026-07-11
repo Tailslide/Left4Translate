@@ -5,9 +5,55 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
+)
 
 from gui.styles import status_dot_color
+
+
+class NoScrollSpinBox(QSpinBox):
+    """QSpinBox that ignores wheel events unless it has keyboard focus.
+
+    Qt's default lets a hovered spinbox eat wheel events, so scrolling a
+    settings page silently edits whatever field the cursor crosses. Requiring
+    focus (a deliberate click) before the wheel changes the value fixes that;
+    unfocused wheel events propagate to the scroll area as the user expects.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event) -> None:  # type: ignore[override]
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
+
+
+class NoScrollComboBox(QComboBox):
+    """QComboBox that ignores wheel events unless it has keyboard focus.
+
+    Same rationale as :class:`NoScrollSpinBox` — hover-scrolling must not
+    silently switch a setting.
+    """
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+
+    def wheelEvent(self, event) -> None:  # type: ignore[override]
+        if self.hasFocus():
+            super().wheelEvent(event)
+        else:
+            event.ignore()
 
 
 class StatCard(QFrame):
@@ -56,6 +102,9 @@ class StatusPill(QLabel):
         label = text if text is not None else self._name
         self.setText(f'<span style="color:{color}">●</span> '
                      f'<span style="color:#8888a0">{label}</span>')
+        # Long detail strings get elided visually; the tooltip keeps them
+        # readable, and always names the component and raw state.
+        self.setToolTip(f"{self._name}: {label} ({state})")
 
 
 class StatusBank(QWidget):

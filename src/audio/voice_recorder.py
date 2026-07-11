@@ -3,8 +3,6 @@ Voice recorder for voice translation feature.
 """
 import logging
 import threading
-import time
-import os
 from typing import Optional, Callable, Any
 import numpy as np
 import sounddevice as sd
@@ -39,13 +37,18 @@ class VoiceRecorder:
         """
         self.sample_rate = sample_rate
         self.channels = channels
-        self.device = device
+        self.device = device  # configured name ("default" or a substring)
+        self.device_index = None  # resolved sounddevice index
         self.on_data_callback = on_data_callback
         
         self.recording = False
         self.audio_data = []
         self.stream = None
         self.lock = threading.Lock()
+        # Live RMS level of the most recent callback block (dBFS). Read by
+        # the GUI meter; written only from the audio callback.
+        self.last_level_db: Optional[float] = None
+        self._callback_status: Optional[str] = None
         
         # Try to find the specified device or use default
         self._find_device()
@@ -53,30 +56,35 @@ class VoiceRecorder:
         logger.debug(f"VoiceRecorder initialized with sample_rate={sample_rate}, channels={channels}, device={self.device}")
     
     def _find_device(self) -> None:
-        """Find the specified audio device or use default."""
+        """Resolve the configured device *name* to a sounddevice index.
+
+        The configured name is kept in ``self.device`` (so config comparisons
+        keep working); the resolved index lives in ``self.device_index``.
+        No test recording happens here — the old constructor-time 2-second
+        mic probe blocked every engine start; level checks are now an
+        explicit action (Settings → Diagnostics → Test microphone).
+        """
         try:
             devices = sd.query_devices()
-            
+
             if self.device and self.device != "default":
                 # Try to find the device by name
                 for i, dev in enumerate(devices):
-                    if self.device.lower() in dev['name'].lower():
-                        self.device = i
+                    if str(self.device).lower() in dev['name'].lower():
+                        self.device_index = i
                         logger.info(f"Found device: {dev['name']} (index: {i})")
-                        self._check_microphone_volume()
                         return
-                
+
                 logger.warning(f"Device '{self.device}' not found. Using default input device.")
-            
+
             # Use default input device
-            self.device = sd.default.device[0]
-            default_device = devices[self.device]
-            logger.info(f"Using default input device: {default_device['name']} (index: {self.device})")
-            self._check_microphone_volume()
-            
+            self.device_index = sd.default.device[0]
+            default_device = devices[self.device_index]
+            logger.info(f"Using default input device: {default_device['name']} (index: {self.device_index})")
+
         except Exception as e:
             logger.error(f"Error finding audio device: {e}")
-            self.device = None
+            self.device_index = None
             
     def _check_microphone_volume(self) -> None:
         """Check microphone volume and provide guidance if it's too low."""
@@ -85,20 +93,12 @@ class VoiceRecorder:
             devices = sd.query_devices()
             device_info = None
             
-            if isinstance(self.device, int):
-                if 0 <= self.device < len(devices):
-                    device_info = devices[self.device]
-                    logger.info(f"Using device index {self.device}: {device_info['name']}")
-            else:
-                # Find device by name
-                for i, dev in enumerate(devices):
-                    if self.device.lower() in dev['name'].lower():
-                        device_info = dev
-                        logger.info(f"Found device by name: {dev['name']} (index: {i})")
-                        break
+            if isinstance(self.device_index, int) and 0 <= self.device_index < len(devices):
+                device_info = devices[self.device_index]
+                logger.info(f"Using device index {self.device_index}: {device_info['name']}")
             
             if device_info:
-                logger.info(f"Device details:")
+                logger.info("Device details:")
                 logger.info(f"  Name: {device_info['name']}")
                 logger.info(f"  Max input channels: {device_info['max_input_channels']}")
                 logger.info(f"  Default sample rate: {device_info['default_samplerate']}")
@@ -116,7 +116,7 @@ class VoiceRecorder:
                 int(duration * sample_rate),
                 samplerate=sample_rate,
                 channels=channels,
-                device=self.device,
+                device=self.device_index,
                 dtype='float32'
             )
             sd.wait()  # Wait for recording to complete
@@ -186,9 +186,7 @@ class VoiceRecorder:
             if len(input_devices) > 1:
                 logger.info("Available alternative microphones:")
                 for i, (idx, device) in enumerate(input_devices):
-                    if isinstance(self.device, int) and idx == self.device:
-                        continue  # Skip current device
-                    if isinstance(self.device, str) and self.device.lower() in device['name'].lower():
+                    if idx == self.device_index:
                         continue  # Skip current device
                     logger.info(f"  {i+1}. {device['name']} (device index: {idx})")
                 
@@ -221,8 +219,8 @@ class VoiceRecorder:
             try:
                 # Get more detailed device info
                 devices = sd.query_devices()
-                if isinstance(self.device, int) and 0 <= self.device < len(devices):
-                    device_info = devices[self.device]
+                if isinstance(self.device_index, int) and 0 <= self.device_index < len(devices):
+                    device_info = devices[self.device_index]
                     logger.info(f"- Device name: {device_info['name']}")
                     logger.info(f"- Max input channels: {device_info['max_input_channels']}")
                     logger.info(f"- Default sample rate: {device_info['default_samplerate']}")
@@ -237,7 +235,7 @@ class VoiceRecorder:
             self.stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=self.channels,
-                device=self.device,
+                device=self.device_index,
                 callback=self._audio_callback
             )
             
@@ -245,7 +243,7 @@ class VoiceRecorder:
             self.stream.start()
             self.recording = True
             
-            logger.info(f"Successfully started recording audio")
+            logger.info("Successfully started recording audio")
             return True
             
         except Exception as e:
@@ -273,7 +271,16 @@ class VoiceRecorder:
                 self.stream = None
                 
             self.recording = False
-            
+
+            # Report anything the realtime callback couldn't log itself.
+            if self._callback_status:
+                logger.warning(f"Audio stream reported: {self._callback_status}")
+                self._callback_status = None
+            if self.last_level_db is not None:
+                logger.info(f"Last block level: {self.last_level_db:.1f} dB RMS")
+                if self.last_level_db < -50:
+                    logger.warning("Audio level is very low. Check microphone and speak louder.")
+
             # Combine all audio chunks into a single array
             with self.lock:
                 if not self.audio_data:
@@ -290,54 +297,33 @@ class VoiceRecorder:
             return np.array([])
     
     def _audio_callback(self, indata, frames, time, status):
-        """
-        Callback function for audio stream.
-        
-        Args:
-            indata: Input audio data
-            frames: Number of frames
-            time: Stream time
-            status: Stream status
+        """PortAudio realtime callback.
+
+        Deliberately minimal: no logging or other blocking I/O in here —
+        sounddevice explicitly warns that blocking work inside the callback
+        can glitch or abort the stream host-side. Level/status reporting is
+        deferred to the consumer thread (see stop_recording).
         """
         if status:
-            logger.warning(f"Audio stream status: {status}")
-            
+            self._callback_status = str(status)
+
         # Make a copy of the data to avoid reference issues
         data = indata.copy()
-        
-        # Log audio levels periodically (every 5 callbacks to avoid excessive logging)
-        if len(self.audio_data) % 5 == 0:
-            # Calculate RMS value to estimate audio level
-            rms = np.sqrt(np.mean(np.square(data)))
-            peak = np.max(np.abs(data))
-            
-            # Convert to dB for easier interpretation
-            if rms > 0:
-                rms_db = 20 * np.log10(rms)
-            else:
-                rms_db = -100  # Arbitrary low value for silence
-                
-            if peak > 0:
-                peak_db = 20 * np.log10(peak)
-            else:
-                peak_db = -100
-                
-            logger.info(f"Audio levels - RMS: {rms_db:.1f} dB, Peak: {peak_db:.1f} dB")
-            
-            # Warn if audio level is too low
-            if rms_db < -50:
-                logger.warning("Audio level is very low. Check microphone and speak louder.")
-        
+
+        # Cheap running level for the GUI's live meter (a few microseconds).
+        rms = float(np.sqrt(np.mean(np.square(data))))
+        self.last_level_db = 20 * float(np.log10(rms)) if rms > 0 else -100.0
+
         # Add the data to our buffer
         with self.lock:
             self.audio_data.append(data)
-            
+
         # Call the data callback if provided
         if self.on_data_callback:
             try:
                 self.on_data_callback(data)
-            except Exception as e:
-                logger.error(f"Error in audio data callback: {e}")
+            except Exception:
+                pass  # consumer errors must not disturb the audio stream
     
     def is_recording(self) -> bool:
         """

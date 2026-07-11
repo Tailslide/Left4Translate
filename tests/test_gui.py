@@ -87,7 +87,8 @@ def test_settings_save_then_reload(app, tmp_path):
     cfg = tmp_path / "config.json"
 
     tab = SettingsTab(str(cfg), store)
-    tab._widgets["screen.port"].setText("COM9")
+    # screen.port is now an editable combo (enumerated COM ports + free text).
+    tab._set_combo_value(tab._widgets["screen.port"], "COM9")
     tab._widgets["game.pollInterval"].setValue(750)
     tab._widgets["voice_translation.enabled"].setChecked(True)
     tab.save()
@@ -99,7 +100,7 @@ def test_settings_save_then_reload(app, tmp_path):
 
     # A fresh tab should read those values back into its widgets.
     tab2 = SettingsTab(str(cfg), store)
-    assert tab2._widgets["screen.port"].text() == "COM9"
+    assert tab2._combo_value(tab2._widgets["screen.port"]) == "COM9"
     assert tab2._widgets["game.pollInterval"].value() == 750
     assert tab2._widgets["voice_translation.enabled"].isChecked() is True
 

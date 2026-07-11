@@ -55,7 +55,8 @@ class ScreenController:
         spacing: int = 2,
         font_path: str = None,
         font_size: int = 14,
-        revision: str = "A"
+        revision: str = "A",
+        app_version: str = ""
     ):
         self.port = port
         self.baud_rate = baud_rate
@@ -66,6 +67,7 @@ class ScreenController:
         self.spacing = spacing
         self.font_size = font_size
         self.revision = revision
+        self.app_version = app_version
         
         # Reusable display library - handles all hardware communication
         self.display = TuringDisplay(
@@ -114,10 +116,11 @@ class ScreenController:
             if not self.display.connect():
                 return False
             
-            # Display startup message
-            from main import __version__
+            # Display startup message. The version is injected by the app
+            # so this module stays reusable (no import from main).
+            title = f"Left4Translate v{self.app_version}" if self.app_version else "Left4Translate"
             self.display.show_message(
-                f"Left4Translate v{__version__}",
+                title,
                 font=self.display.font_bold,
                 color=self.PLAYER_COLOR,
                 delay=2
@@ -215,6 +218,19 @@ class ScreenController:
             expiry=datetime.fromtimestamp(now.timestamp() + message_timeout / 1000) if message_timeout > 0 else None
         )
         
+        # A message taller than the whole screen would previously be dropped
+        # silently; shorten its texts until it fits instead.
+        max_height = self._screen_height - self.margin * 2
+        guard = 0
+        while self._calculate_message_height(message) > max_height and guard < 24:
+            if len(message.translated) > 40:
+                message.translated = message.translated[: int(len(message.translated) * 0.75)].rstrip() + "…"
+            elif len(message.original) > 40:
+                message.original = message.original[: int(len(message.original) * 0.75)].rstrip() + "…"
+            else:
+                break
+            guard += 1
+
         # Thread-safe update of active_messages
         with self._active_messages_lock:
             # Calculate total height needed for all messages including the new one
@@ -248,6 +264,21 @@ class ScreenController:
         """Set the screen brightness level (0-100)."""
         self.display.set_brightness(level)
             
+    def _prune_expired(self, now: datetime) -> List[DisplayMessage]:
+        """Drop expired messages and return a snapshot of the remainder.
+
+        Expiry is per-message: any message created with a positive timeout
+        (e.g. voice ``clear_after``) gets an expiry even when the
+        controller-wide default is 0 ("keep chat forever"); messages without
+        an expiry stay until pushed out by newer ones.
+        """
+        with self._active_messages_lock:
+            self.active_messages = [
+                msg for msg in self.active_messages
+                if msg.expiry is None or msg.expiry > now
+            ]
+            return list(self.active_messages)
+
     def _display_loop(self):
         """Main display update loop."""
         while self.running:
@@ -265,16 +296,8 @@ class ScreenController:
             
         now = datetime.now()
         
-        # Get a copy of messages under lock for thread safety
-        with self._active_messages_lock:
-            # Remove expired messages if timeout is enabled
-            if self.message_timeout > 0:
-                self.active_messages = [
-                    msg for msg in self.active_messages
-                    if msg.expiry and msg.expiry > now
-                ]
-            # Make a copy to avoid holding lock during rendering
-            messages_to_display = list(self.active_messages)
+        # Prune expired messages, then copy under lock for rendering.
+        messages_to_display = self._prune_expired(now)
         
         # Clear buffer using display library
         self.display.clear()

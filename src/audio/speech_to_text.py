@@ -4,7 +4,7 @@ Speech-to-text service for voice translation feature.
 import logging
 import os
 import io
-from typing import Tuple, Optional, Dict, Any
+from typing import Tuple, Optional
 import numpy as np
 from google.cloud import speech
 from google.oauth2 import service_account
@@ -83,7 +83,7 @@ class SpeechToTextService:
                 try:
                     credentials = service_account.Credentials.from_service_account_file(self.credentials_path)
                     client = speech.SpeechClient(credentials=credentials)
-                    logger.info(f"Successfully initialized Speech-to-Text client with credentials")
+                    logger.info("Successfully initialized Speech-to-Text client with credentials")
                     return client
                 except Exception as cred_error:
                     logger.error(f"Failed to initialize client with credentials file: {cred_error}")
@@ -175,19 +175,12 @@ class SpeechToTextService:
             logger.info("Received response from Google Speech-to-Text API")
             
             # Process results
-            if not response.results:
+            transcript, confidence = self._extract_transcript(response)
+            if not transcript:
                 logger.warning("No transcription results returned from API")
                 logger.info("This could be due to no speech detected or audio quality issues")
                 return "", 0.0
-                
-            result = response.results[0]
-            if not result.alternatives:
-                logger.warning("No transcription alternatives in results")
-                return "", 0.0
-                
-            transcript = result.alternatives[0].transcript
-            confidence = result.alternatives[0].confidence
-            
+
             logger.info(f"Transcribed: '{transcript}' (confidence: {confidence:.2f})")
             return transcript, confidence
             
@@ -197,6 +190,29 @@ class SpeechToTextService:
             logger.error(f"Transcription error traceback: {traceback.format_exc()}")
             return "", 0.0
     
+    @staticmethod
+    def _extract_transcript(response) -> Tuple[str, float]:
+        """Join every result's best alternative into one transcript.
+
+        Longer clips come back as multiple results (one per utterance);
+        using only the first silently dropped everything after the first
+        pause. Confidence is the average across the used alternatives.
+        """
+        parts = []
+        confidences = []
+        for result in getattr(response, "results", []) or []:
+            if result.alternatives:
+                best = result.alternatives[0]
+                text = best.transcript.strip()
+                if text:
+                    parts.append(text)
+                    confidences.append(best.confidence)
+        if not parts:
+            return "", 0.0
+        transcript = " ".join(parts)
+        confidence = sum(confidences) / len(confidences)
+        return transcript, confidence
+
     def _convert_to_bytes(self, audio_data: np.ndarray) -> bytes:
         """
         Convert NumPy audio data to bytes.

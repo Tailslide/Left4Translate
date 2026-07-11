@@ -48,6 +48,7 @@ def _opt(src, dest):
 
 engine_datas = (
     _opt('config/config.sample.json', 'config')
+    + _opt('config/slang_es.sample.json', 'config')
     + _opt('res/icon.ico', 'res')
     + _opt('docs', 'docs')
     + _opt('turing-smart-screen-python/library', 'library')
@@ -65,9 +66,11 @@ a = Analysis(
         'gui', 'gui.app', 'gui.main_window', 'gui.dashboard_tab', 'gui.voice_tab',
         'gui.settings_tab', 'gui.logs_tab', 'gui.tray', 'gui.widgets',
         'gui.engine_controller', 'gui.settings_store', 'gui.styles', 'gui.theme',
-        'gui.log_handler', 'gui.stream_capture',
+        'gui.log_handler', 'gui.stream_capture', 'gui.crash_guard',
+        'gui.overlay_window',
         # Engine (src/) — imported lazily by the controller thread.
         'main',
+        'version',
         'config.config_manager',
         'reader.message_reader',
         'translator.translation_service',
@@ -80,7 +83,6 @@ a = Analysis(
         'watchdog', 'watchdog.observers', 'watchdog.observers.winapi',
         'watchdog.observers.api', 'watchdog.observers.read_directory_changes',
         'watchdog.events',
-        'google.cloud.translate_v2',
         'cachetools', 'serial', 'serial.tools', 'serial.tools.list_ports',
         'serial.tools.list_ports_common', 'serial.tools.list_ports_windows',
         'serial.win32', 'numpy', 'PIL', 'requests', 'pynput', 'sounddevice',

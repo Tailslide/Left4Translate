@@ -2,7 +2,22 @@
 
 ## System Overview
 
-Left4Translate is a system designed to capture, translate, and display Left 4 Dead chat messages on a secondary Turing Smart Screen display. The system provides real-time translation of in-game chat messages to English, enhancing communication for non-English speaking players.
+Left4Translate is a system designed to capture, translate, and display Left 4 Dead chat messages on a secondary Turing Smart Screen display (or an always-on-top on-screen overlay). The system provides real-time translation of in-game chat messages to English, enhancing communication for non-English speaking players.
+
+The project ships two front-ends over one engine:
+
+- **Console app** (`src/main.py`) — the original CLI.
+- **Desktop GUI** (`gui/`, entry point `gui_main.py`) — a PySide6 app that
+  embeds the same engine on a background thread via
+  `gui/engine_controller.py`, bridging its `on_translation` / `on_status`
+  callbacks onto Qt signals. The GUI adds a live feed, a settings editor with
+  diagnostics, a log viewer, a system tray, an always-on-top overlay
+  (`gui/overlay_window.py`), global crash reporting (`gui/crash_guard.py`),
+  and a single-instance guard.
+
+Interfaces below are indicative; see the source for the authoritative
+signatures (notably `TranslationService.translate_with_detection`, which
+returns `(translated_text, detected_source_language)` in one API call).
 
 ## Components
 

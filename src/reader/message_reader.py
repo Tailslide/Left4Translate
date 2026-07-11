@@ -1,6 +1,5 @@
 import re
 import os
-import time
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -47,11 +46,31 @@ class GameLogHandler(FileSystemEventHandler):
         self.last_position = 0
         self.file_path = file_path
         self.logger = logging.getLogger(__name__)
+        # First bytes of the file, used to detect truncation/replacement even
+        # when the rewritten file is longer than our previous read position.
+        self._fingerprint = b""
         
     def on_modified(self, event: FileModifiedEvent):
         """Called when the log file is modified."""
-        if not event.is_directory and os.path.samefile(event.src_path, self.file_path):
+        if not event.is_directory and self._is_our_file(event.src_path):
             self._process_new_lines(event.src_path)
+
+    def on_created(self, event):
+        """Called when a file appears - catches the log being (re)created."""
+        if not event.is_directory and self._is_our_file(event.src_path):
+            self.logger.info(f"Log file created: {event.src_path}")
+            self.last_position = 0
+            self._fingerprint = b""
+            self._process_new_lines(event.src_path)
+
+    def _is_our_file(self, path: str) -> bool:
+        """Robust path comparison - samefile raises if either path vanished."""
+        try:
+            return os.path.samefile(path, self.file_path)
+        except OSError:
+            return os.path.normcase(os.path.abspath(path)) == os.path.normcase(
+                os.path.abspath(self.file_path)
+            )
             
     def _get_last_n_lines(self, file_path: str, n: int = 10) -> list[str]:
         """Get the last N lines from a file that match our message pattern."""
@@ -74,6 +93,7 @@ class GameLogHandler(FileSystemEventHandler):
         """Process new lines added to the log file."""
         try:
             if from_start:
+                self._sync_position(file_path)
                 # Set position to end of file first
                 with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                     f.seek(0, 2)  # Seek to end
@@ -84,6 +104,12 @@ class GameLogHandler(FileSystemEventHandler):
                 for line in lines:
                     self._process_line(line)
             else:
+                # The game truncates console.log on restart (and -conclearlog
+                # empties it on every launch). If we kept reading from the old
+                # position, seek()+readlines() would silently return nothing
+                # (or garbage) forever - detect it and restart from the top.
+                self._sync_position(file_path)
+
                 # Process new lines normally for real-time updates
                 with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
                     f.seek(self.last_position)
@@ -100,6 +126,33 @@ class GameLogHandler(FileSystemEventHandler):
         except Exception as e:
             self.logger.error(f"Error reading log file: {e}")
             
+    def _sync_position(self, file_path: str) -> None:
+        """Reset ``last_position`` if the log file was truncated or replaced.
+
+        Two signals: the file shrank below our position, or its first bytes no
+        longer match the fingerprint we captured (covers a truncated file that
+        has already been rewritten past our old position).
+        """
+        try:
+            size = os.path.getsize(file_path)
+            with open(file_path, 'rb') as f:
+                head = f.read(64)
+        except OSError:
+            self.last_position = 0
+            self._fingerprint = b""
+            return
+
+        truncated = size < self.last_position or (
+            bool(self._fingerprint) and not head.startswith(self._fingerprint)
+        )
+        if truncated:
+            self.logger.info("Log file truncated or replaced - restarting read from the beginning")
+            self.last_position = 0
+            self._fingerprint = head
+        elif len(head) > len(self._fingerprint):
+            # File is still short; keep extending the fingerprint as it grows.
+            self._fingerprint = head
+
     def _is_system_message(self, line: str) -> bool:
         """Check if a line is a system message."""
         # Skip empty lines first
@@ -111,16 +164,12 @@ class GameLogHandler(FileSystemEventHandler):
             if line.startswith(prefix):
                 return True
                 
-        # Only then check if it matches chat pattern
-        # Chat messages have a specific format:
-        # 1. Team chat: "(Survivor|Infected) ♥Name : message"
-        # 2. Regular chat: "Name : message"
-        # Use .+? (not [^:]+) so player names containing colons still match;
-        # the \s+:\s+ around the separator is what disambiguates name from message.
-        chat_pattern = r'^(?:\((Survivor|Infected)\)\s+)?.+?\s+:\s+.+'
-        if re.match(chat_pattern, line):
+        # Only then check against the configured chat pattern — the same one
+        # _process_line parses with, so the two stages can never disagree
+        # about what counts as chat (they previously used separate regexes).
+        if self.message_pattern.match(line):
             return False
-                
+
         return True  # Default to treating unknown formats as system messages
             
     def _clean_text(self, text: Optional[str]) -> Optional[str]:
@@ -231,9 +280,14 @@ class GameMessageReader:
             raise
         
     def stop_monitoring(self):
-        """Stop monitoring the log file."""
+        """Stop monitoring the log file. Safe to call even if monitoring
+        never started (joining an unstarted observer would raise)."""
         self.logger.info("Stopping log file monitoring...")
         self.running = False
-        self.observer.stop()
-        self.observer.join()
+        try:
+            self.observer.stop()
+            if self.observer.is_alive():
+                self.observer.join()
+        except RuntimeError as e:
+            self.logger.debug(f"Observer was not running: {e}")
         self.logger.info("Log file monitoring stopped")

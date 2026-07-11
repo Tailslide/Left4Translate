@@ -54,7 +54,7 @@ class ConfigManager:
             with open(self.config_path, 'r') as f:
                 self.config = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in configuration file: {e}")
+            raise ValueError(f"Invalid JSON in configuration file: {e}") from e
             
     def validate_config(self) -> List[str]:
         """Validate the configuration and return list of errors."""
@@ -149,16 +149,18 @@ class ConfigManager:
         )
         
     def get_setting(self, key: str, default: Optional[T] = None) -> T:
-        """Get a specific configuration setting."""
+        """Get a specific configuration setting by dotted path."""
         keys = key.split('.')
         value = self.config
-        
+
         for k in keys:
-            if isinstance(value, dict):
-                value = value.get(k, default)
+            if isinstance(value, dict) and k in value:
+                value = value[k]
             else:
+                # A missing intermediate key used to substitute the default
+                # and keep traversing *into* it, returning nonsense.
                 return default
-                
+
         return value if value is not None else default
         
     def get_config(self) -> Dict[str, Any]:
