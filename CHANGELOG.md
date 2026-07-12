@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Fixed
+- **Random native crash (access violation) during long GUI sessions**:
+  Python's cyclic garbage collector could run on an engine worker thread and
+  destroy Qt objects that belong to the GUI thread, corrupting Qt and killing
+  the process mid-translation (crash.log showed the fault inside the
+  dashboard feed's table update). Automatic GC is now disabled in the GUI and
+  collections run from a timer on the GUI thread instead (`gui/gc_guard.py`).
 - **Silent exits**: the GUI now installs global crash reporting — uncaught
   errors are written to `logs/app.log`, native faults (Qt, PortAudio, mouse
   hook, serial) to `logs/crash.log`, and an error dialog is shown instead of
