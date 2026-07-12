@@ -12,7 +12,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from gui import crash_guard
+from gui import crash_guard, gc_guard
 from gui.main_window import MainWindow
 from gui.settings_store import SettingsStore
 from gui.theme import apply_theme
@@ -134,6 +134,9 @@ def build_application(argv: Optional[Sequence[str]] = None) -> tuple[QApplicatio
     app = QApplication.instance() or QApplication(
         list(argv) if argv is not None else sys.argv
     )
+    # Cyclic GC must never run on the engine's worker threads (it would
+    # destroy Qt objects off the GUI thread → native access violation).
+    gc_guard.install(app)
     crash_guard.reporter.crashed.connect(_show_crash_dialog)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(ORG_NAME)
