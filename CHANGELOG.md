@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Fixed
+- **Native crash (access violation) once the dashboard feed filled up**: the
+  crash from the earlier GC fix recurred in the field, and both crash logs
+  fault at the same place — trimming the oldest feed row (`removeRow`) after
+  500 translations, where Qt destroys that row's five C++ `QTableWidgetItem`
+  objects. The feed is now a `QTableView` over a plain-Python model
+  (`FeedModel`): rows are tuples in a deque, and inserting/trimming rows no
+  longer allocates or destroys any per-cell C++ objects, removing the crash
+  site entirely (`gui/dashboard_tab.py`).
 - **Random native crash (access violation) during long GUI sessions**:
   Python's cyclic garbage collector could run on an engine worker thread and
   destroy Qt objects that belong to the GUI thread, corrupting Qt and killing

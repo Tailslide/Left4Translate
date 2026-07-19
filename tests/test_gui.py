@@ -66,16 +66,39 @@ def test_dashboard_counts_and_feed(app):
     from gui.engine_controller import EngineController
 
     tab = DashboardTab(EngineController("nonexistent.json"))
+    model = tab._feed.model()
     tab.add_translation({"kind": "chat", "player": "P", "original": "hola", "translated": "hi", "team": "Survivor"})
     tab.add_translation({"kind": "voice", "player": "Voice", "original": "uno", "translated": "one", "team": None})
     assert tab._count == 2
     assert tab._chars == len("hola") + len("uno")
-    assert tab._feed.rowCount() == 2
+    assert model.rowCount() == 2
     # Newest row is on top.
-    assert tab._feed.item(0, 2).text() == "Voice"
+    assert model.index(0, 2).data() == "Voice"
     tab.reset()
     assert tab._count == 0
-    assert tab._feed.rowCount() == 0
+    assert model.rowCount() == 0
+
+
+def test_dashboard_feed_caps_rows(app):
+    """Regression: long sessions crashed natively when the feed trimmed its
+    oldest QTableWidget row (access violation in removeRow, logs/crash.log).
+    The model-backed feed must cap rows in pure Python without ever exceeding
+    the limit."""
+    from gui.dashboard_tab import _MAX_FEED_ROWS, DashboardTab
+    from gui.engine_controller import EngineController
+
+    tab = DashboardTab(EngineController("nonexistent.json"))
+    model = tab._feed.model()
+    for i in range(_MAX_FEED_ROWS + 25):
+        tab.add_translation({
+            "kind": "chat", "player": f"P{i}", "original": f"msg {i}",
+            "translated": f"tr {i}", "team": "Survivor",
+        })
+    assert model.rowCount() == _MAX_FEED_ROWS
+    # Newest row on top, oldest rows trimmed from the bottom.
+    assert model.index(0, 2).data() == f"P{_MAX_FEED_ROWS + 24}"
+    assert model.index(model.rowCount() - 1, 2).data() == "P25"
+    assert tab._count == _MAX_FEED_ROWS + 25
 
 
 def test_settings_save_then_reload(app, tmp_path):
