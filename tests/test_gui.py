@@ -142,12 +142,16 @@ def test_engine_controller_status_signal(app):
 # ---- Overlay window -------------------------------------------------------
 
 def _count_overlay_messages(overlay) -> int:
+    """Count populated message labels. The overlay keeps a fixed pool of
+    labels alive (crash hardening), so 'shown' means visible-with-text."""
     from gui.overlay_window import _MessageLabel
 
     return sum(
         1
         for i in range(overlay._body_layout.count())
-        if isinstance(overlay._body_layout.itemAt(i).widget(), _MessageLabel)
+        if isinstance(w := overlay._body_layout.itemAt(i).widget(), _MessageLabel)
+        and w.isVisibleTo(overlay)
+        and w.text()
     )
 
 

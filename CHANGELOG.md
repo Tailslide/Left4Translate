@@ -11,6 +11,11 @@
   (`FeedModel`): rows are tuples in a deque, and inserting/trimming rows no
   longer allocates or destroys any per-cell C++ objects, removing the crash
   site entirely (`gui/dashboard_tab.py`).
+- **Overlay hardened the same way**: a later crash log caught the same native
+  fault while the overlay was constructing a new message QLabel. The overlay
+  now keeps a fixed pool of labels and reuses them (set text / toggle
+  visibility) instead of destroying and recreating widgets on every
+  translation (`gui/overlay_window.py`).
 - **Random native crash (access violation) during long GUI sessions**:
   Python's cyclic garbage collector could run on an engine worker thread and
   destroy Qt objects that belong to the GUI thread, corrupting Qt and killing
