@@ -374,6 +374,11 @@ QWidget#HeaderBar QLabel#AppTitle {{
     font-weight: 700;
     color: {TEXT_PRIMARY};
 }}
+QWidget#HeaderBar QLabel#AppVersion {{
+    font-size: 12px;
+    font-weight: 600;
+    color: {TEXT_SECONDARY};
+}}
 QLabel#StatusPill {{
     font-size: 12px;
     font-weight: 600;

@@ -31,6 +31,19 @@ def app():
 
 # ---- Pure helpers (no Qt) -------------------------------------------------
 
+def test_app_version_matches_single_source():
+    """The title-bar version must come from src/version.py (the value the
+    bump-version CI rewrites), not a hardcoded string."""
+    from gui.engine_controller import _ensure_engine_importable
+    from gui.main_window import app_version
+
+    _ensure_engine_importable()
+    from version import __version__
+
+    assert app_version() == __version__
+    assert app_version()  # non-empty
+
+
 def test_dig_and_bury_roundtrip():
     data: dict = {}
     _bury(data, "screen.display.maxMessages", 12)

@@ -37,6 +37,24 @@ _logger = logging.getLogger("left4translate.gui")
 _STATUS_COMPONENTS = ["engine", "screen", "chat", "voice"]
 
 
+def app_version() -> str:
+    """Best-effort application version for display.
+
+    Single-sourced in ``src/version.py`` (the same value the bump-version CI
+    rewrites). Returns ``""`` if it can't be imported — a missing version must
+    never stop the window from opening.
+    """
+    try:
+        from gui.engine_controller import _ensure_engine_importable
+
+        _ensure_engine_importable()
+        from version import __version__
+
+        return __version__
+    except Exception:  # pragma: no cover - defensive; import wiring only
+        return ""
+
+
 class MainWindow(QMainWindow):
     """Top-level window for the Left4Translate desktop GUI."""
 
@@ -47,7 +65,10 @@ class MainWindow(QMainWindow):
         controller: Optional[EngineController] = None,
     ) -> None:
         super().__init__()
-        self.setWindowTitle("Left4Translate")
+        self._version = app_version()
+        self.setWindowTitle(
+            f"Left4Translate v{self._version}" if self._version else "Left4Translate"
+        )
 
         self._config_path = config_path
         self._store = store or SettingsStore()
@@ -87,6 +108,12 @@ class MainWindow(QMainWindow):
         title = QLabel("Left4Translate")
         title.setObjectName("AppTitle")
         row.addWidget(title)
+
+        if self._version:
+            version_label = QLabel(f"v{self._version}")
+            version_label.setObjectName("AppVersion")
+            version_label.setToolTip("Application version")
+            row.addWidget(version_label)
 
         self._mode_combo = NoScrollComboBox()
         for mode in MODES:
