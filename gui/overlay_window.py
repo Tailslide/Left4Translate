@@ -123,6 +123,19 @@ class OverlayWindow(QWidget):
         self._hint.setObjectName("OverlayHint")
         self._body_layout.insertWidget(0, self._hint)
 
+        # Fixed pool of message labels, reused for every update. Creating and
+        # destroying QLabels per translation churned the C++ heap on the GUI
+        # thread and was one of the native-crash detonation sites seen in
+        # logs/crash.log (access violation inside _MessageLabel.__init__).
+        # Labels sit between the hint and the trailing stretch; index 0 is the
+        # topmost (newest) message.
+        self._labels: list[_MessageLabel] = []
+        for _ in range(_MAX_MESSAGES):
+            label = _MessageLabel("", self._body)
+            label.setVisible(False)
+            self._body_layout.insertWidget(self._body_layout.count() - 1, label)
+            self._labels.append(label)
+
         # Resize handle in the bottom-right corner.
         grip_row = QHBoxLayout()
         grip_row.setContentsMargins(0, 0, 2, 2)
@@ -216,20 +229,16 @@ class OverlayWindow(QWidget):
     # ---- Rendering ------------------------------------------------------
 
     def _rebuild(self) -> None:
-        # Drop existing message labels (keep the leading hint + trailing stretch).
-        for i in reversed(range(self._body_layout.count())):
-            item = self._body_layout.itemAt(i)
-            widget = item.widget()
-            if isinstance(widget, _MessageLabel):
-                widget.setParent(None)
-                widget.deleteLater()
-
-        self._hint.setVisible(not self._messages)
-
-        # Insert newest first so it appears at the top of the body.
-        for html in reversed(self._messages):
-            label = _MessageLabel(html, self._body)
-            self._body_layout.insertWidget(0, label)
+        # Repopulate the fixed label pool: newest message in the top label,
+        # unused labels hidden. No widgets are created or destroyed here.
+        messages = list(reversed(self._messages))  # newest first
+        self._hint.setVisible(not messages)
+        for label, html in zip(self._labels, messages, strict=False):
+            label.setText(html)
+            label.setVisible(True)
+        for label in self._labels[len(messages):]:
+            label.setVisible(False)
+            label.setText("")
 
     # ---- Font size ------------------------------------------------------
 

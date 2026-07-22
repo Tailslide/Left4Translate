@@ -38,7 +38,10 @@ ignore = [
 
 [tool.bumpversion]
 current_version = "1.2.7"
-commit = false
+# The Auto Bump Version workflow relies on bump-my-version making the commit
+# itself (then pushes it). With commit = false the bump only edited the files
+# and the workflow's push was a silent no-op, so the version never moved.
+commit = true
 tag = false
 message = "Bump version: {current_version} → {new_version} [skip ci]"
 
