@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 pytest.importorskip("PySide6")
 
 from PySide6.QtCore import QSettings  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtWidgets import QApplication, QPushButton  # noqa: E402
 
 from gui.settings_store import SettingsStore  # noqa: E402
 from gui.settings_tab import _TRIGGER_BUTTONS, SettingsTab  # noqa: E402
@@ -71,6 +71,34 @@ def test_exotic_language_survives(app, tmp_path):
     tab.save()
     saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert saved["translation"]["targetLanguage"] == "eu"
+
+
+def _icon_buttons(tab: SettingsTab) -> list[QPushButton]:
+    return [b for b in tab.findChildren(QPushButton)
+            if b.objectName() == "IconButton"]
+
+
+def test_rescan_buttons_are_styled_icon_buttons(app, tmp_path):
+    # The serial-port and microphone combos each get a re-scan button. It must
+    # carry the IconButton object name (which drops the wide default padding
+    # that clipped the glyph into an unreadable sliver) and stay a compact
+    # square rather than the full-width default button.
+    tab = _tab(tmp_path)
+    buttons = _icon_buttons(tab)
+    assert len(buttons) == 2, "expected a re-scan button for ports and mics"
+    for btn in buttons:
+        assert btn.text() == "↻"
+        assert btn.width() <= 40, "re-scan button should stay a compact square"
+
+
+def test_rescan_reports_device_count(app, tmp_path):
+    # Re-scanning with an unchanged device list produces no visible change,
+    # which reads as a dead button; a status message confirms it ran.
+    tab = _tab(tmp_path)
+    messages: list[str] = []
+    tab.status_message.connect(messages.append)
+    _icon_buttons(tab)[0].click()
+    assert messages and "Re-scanned" in messages[-1]
 
 
 def test_new_fields_get_safe_defaults(app, tmp_path):

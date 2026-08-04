@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Fixed
+- **Settings device combos looked broken**: the ↻ re-scan buttons beside the
+  Serial port and Microphone device fields inherited the wide default button
+  padding, which crushed the glyph into an unreadable vertical sliver, and the
+  combo boxes showed no drop-down arrow at all (styling `QComboBox::drop-down`
+  suppresses Qt's native arrow). The re-scan buttons are now compact icon
+  buttons that render the glyph cleanly, every combo shows a theme-colored
+  drop-down chevron so it reads as a combo box, and clicking re-scan now
+  reports how many devices were found instead of silently doing nothing
+  (`gui/styles.py`, `gui/settings_tab.py`).
 - **Translation failed with 403 `API_KEY_IP_ADDRESS_BLOCKED` on IPv6**: an
   API key restricted to an IPv4 address was rejected because, on a dual-stack
   host, `requests`/urllib3 prefers IPv6 and the call went out over IPv6.

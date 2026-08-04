@@ -10,6 +10,9 @@ Fusion defaults (see :mod:`gui.theme`).
 
 from __future__ import annotations
 
+import os
+import tempfile
+
 
 # ---- Color tokens ---------------------------------------------------------
 # Shared with l4d2gamefinder so both apps read as one product family.
@@ -179,6 +182,15 @@ QPushButton:disabled {{
     background: {BG_PANEL};
 }}
 
+/* Square single-glyph buttons (e.g. the ↻ re-scan next to device combos).
+   The global QPushButton padding (14px each side) is wider than these buttons
+   are, which used to clip the glyph into an unreadable sliver. */
+QPushButton#IconButton {{
+    padding: 0;
+    font-size: 15px;
+    font-weight: 400;
+}}
+
 QPushButton#PrimaryButton {{
     background: {ACCENT};
     color: white;
@@ -232,7 +244,14 @@ QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 18px;
+    width: 20px;
+}}
+/* Styling ::drop-down suppresses Qt's native arrow, so supply our own. Without
+   this the combos render as flat text fields with no dropdown affordance. */
+QComboBox::down-arrow {{
+    image: url("{ARROW}");
+    width: 12px;
+    height: 12px;
 }}
 QComboBox QAbstractItemView {{
     background: {BG_CARD};
@@ -426,7 +445,40 @@ QLabel#EmptyHint {{
 }}
 """
 
+
+def _arrow_svg_url(color: str, name: str) -> str:
+    """Write a small chevron SVG and return a QSS-ready ``url()`` path.
+
+    Qt stylesheets can't embed an image inline and can't recolor a built-in
+    one, and the built-in commonstyle arrow is near-black (invisible on our
+    dark panels). Dropping a tiny theme-colored SVG in the temp dir and
+    pointing ``url()`` at it sidesteps both problems and needs no bundled
+    asset. Returns an empty string if the file can't be written, which QSS
+    treats as "no image" — the same as before this existed.
+    """
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" '
+        'viewBox="0 0 12 12">'
+        f'<path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="{color}" '
+        'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
+        '</svg>'
+    )
+    path = os.path.join(tempfile.gettempdir(), name)
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(svg)
+    except OSError:
+        return ""
+    # QSS url() wants forward slashes even on Windows.
+    return path.replace(os.sep, "/")
+
+
+_DARK_ARROW = _arrow_svg_url(TEXT_SECONDARY, "left4translate_combo_arrow_dark.svg")
+_LIGHT_ARROW = _arrow_svg_url("#5a5a6e", "left4translate_combo_arrow_light.svg")
+
+
 _DARK_TOKENS = {
+    "ARROW": _DARK_ARROW,
     "BG_WINDOW": BG_WINDOW,
     "BG_PANEL": BG_PANEL,
     "BG_CARD": BG_CARD,
@@ -448,6 +500,7 @@ LIGHT_BG_WINDOW = "#f5f5f7"
 LIGHT_TEXT_PRIMARY = "#1d1d24"
 
 _LIGHT_TOKENS = {
+    "ARROW": _LIGHT_ARROW,
     "BG_WINDOW": LIGHT_BG_WINDOW,
     "BG_PANEL": "#ececf0",
     "BG_CARD": "#ffffff",
