@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Fixed
+- **Translation failed with 403 `API_KEY_IP_ADDRESS_BLOCKED` on IPv6**: an
+  API key restricted to an IPv4 address was rejected because, on a dual-stack
+  host, `requests`/urllib3 prefers IPv6 and the call went out over IPv6.
+  Outbound Translation API connections are now pinned to IPv4 by default so
+  they match the key's restriction. Toggle with the new `translation.forceIPv4`
+  config option (default `true`) or the "Force IPv4" checkbox in Settings →
+  Translation; set it `false` to allow IPv6 (`src/translator/translation_service.py`).
 - **Native crash (access violation) once the dashboard feed filled up**: the
   crash from the earlier GC fix recurred in the field, and both crash logs
   fault at the same place — trimming the oldest feed row (`removeRow`) after

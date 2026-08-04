@@ -118,10 +118,16 @@
        "service": "google",
        "targetLanguage": "en",
        "cacheSize": 1000,
-       "rateLimitPerMinute": 100
+       "rateLimitPerMinute": 100,
+       "forceIPv4": true
      }
    }
    ```
+
+   `forceIPv4` (default `true`) pins outbound Translation API calls to IPv4.
+   Keep it enabled if your Google API key has an IPv4 address restriction —
+   otherwise a dual-stack machine may call over IPv6 and get a
+   `403 API_KEY_IP_ADDRESS_BLOCKED` error.
 
 2. Display Settings
    ```json

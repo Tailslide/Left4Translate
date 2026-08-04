@@ -137,6 +137,7 @@ _FIELDS: List[Tuple[str, str]] = [
     ("translation.targetLanguage", "choice:lang"),
     ("translation.cacheSize", "int"),
     ("translation.rateLimitPerMinute", "int"),
+    ("translation.forceIPv4", "bool"),
     ("screen.enabled", "bool"),
     ("screen.port", "choice:ports"),
     ("screen.baudRate", "int"),
@@ -228,6 +229,7 @@ class SettingsTab(QWidget):
             ("translation.targetLanguage", "Target language", "choice:lang"),
             ("translation.cacheSize", "Cache size", "int:0:100000"),
             ("translation.rateLimitPerMinute", "Rate limit / min", "int:1:100000"),
+            ("translation.forceIPv4", "Force IPv4 (uncheck to allow IPv6; keep on if your API key is IP-restricted)", "bool"),
         ]))
         self._form_root.addWidget(self._group("Turing Screen", [
             ("screen.enabled", "Use hardware Turing screen (uncheck to use the overlay only)", "bool"),
@@ -478,6 +480,7 @@ class SettingsTab(QWidget):
             if value is None:
                 value = {
                     "screen.enabled": True,
+                    "translation.forceIPv4": True,
                     "voice_translation.speech_to_text.model": "default",
                     "voice_translation.clipboard.format": "translated",
                 }.get(path)
@@ -606,6 +609,10 @@ class SettingsTab(QWidget):
     def _test_translation(self) -> None:
         api_key = self._widgets["translation.apiKey"].text().strip()
         target = self._combo_value(self._widgets["translation.targetLanguage"]) or "en"
+        # Read on the GUI thread so the diagnostic matches the current setting.
+        # Forcing IPv4 is a process-global switch, so a test must not pin it
+        # when the user has chosen to allow IPv6.
+        force_ipv4 = self._widgets["translation.forceIPv4"].isChecked()
         if not api_key:
             self._diag_label.setText("Enter a Google API key first.")
             return
@@ -616,7 +623,9 @@ class SettingsTab(QWidget):
             _ensure_engine_importable()
             from translator.translation_service import TranslationService
 
-            svc = TranslationService(api_key=api_key, target_language=target)
+            svc = TranslationService(
+                api_key=api_key, target_language=target, force_ipv4=force_ipv4
+            )
             translated, source = svc.translate_with_detection("hola amigo")
             return f"Translation OK: 'hola amigo' → '{translated}' (detected: {source})"
 

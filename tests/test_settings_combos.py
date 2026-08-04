@@ -79,3 +79,5 @@ def test_new_fields_get_safe_defaults(app, tmp_path):
     saved = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
     assert saved["voice_translation"]["speech_to_text"]["model"] == "default"
     assert saved["voice_translation"]["clipboard"]["format"] == "translated"
+    # IPv4 pinning defaults on so IP-restricted keys keep working over IPv4.
+    assert saved["translation"]["forceIPv4"] is True

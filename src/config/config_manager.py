@@ -19,6 +19,7 @@ class TranslationConfig:
     cache_size: int
     rate_limit_per_minute: int
     retry_attempts: int
+    force_ipv4: bool = True
 
 @dataclass
 class ScreenConfig:
@@ -122,7 +123,8 @@ class ConfigManager:
             target_language=config.get("targetLanguage", "en"),
             cache_size=config.get("cacheSize", 1000),
             rate_limit_per_minute=config.get("rateLimitPerMinute", 100),
-            retry_attempts=config.get("retryAttempts", 3)
+            retry_attempts=config.get("retryAttempts", 3),
+            force_ipv4=config.get("forceIPv4", True)
         )
         
     def get_screen_config(self) -> ScreenConfig:

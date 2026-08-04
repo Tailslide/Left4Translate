@@ -4,6 +4,7 @@ import requests
 from datetime import datetime
 import json
 import os
+import socket
 import threading
 import time
 import logging
@@ -15,6 +16,38 @@ logger = logging.getLogger(__name__)
 # Network timeout for every Translation API call. Without one, a stalled
 # connection blocks the calling thread (chat reader / voice worker) forever.
 REQUEST_TIMEOUT_SECONDS = 10
+
+# Google API keys can be restricted to a specific IP. translation.googleapis.com
+# publishes both A and AAAA records, and on a dual-stack host requests/urllib3
+# prefers IPv6 (RFC 6724), so the call egresses over IPv6. When the key's
+# restriction lists an IPv4 address, Google then rejects the call with
+# 403 API_KEY_IP_ADDRESS_BLOCKED. Pinning urllib3 to IPv4 makes the outbound
+# address match the restriction. Home IPv6 is often a rotating privacy address
+# (RFC 8981) too, so IPv4 is also the more stable thing to whitelist against.
+_ipv4_forced = False
+
+
+def force_ipv4_connections() -> None:
+    """Force requests/urllib3 to connect over IPv4 only.
+
+    Patches urllib3's address-family selector so DNS resolution keeps only the
+    IPv4 (A) records. Process-global (urllib3 consults this selector for every
+    connection it makes) and idempotent — safe to call from every
+    :class:`TranslationService` constructor. Harmless when no IP restriction is
+    in play, since IPv4 connectivity to Google's endpoints always works.
+    """
+    global _ipv4_forced
+    if _ipv4_forced:
+        return
+    try:
+        import urllib3.util.connection as urllib3_connection
+
+        urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+        _ipv4_forced = True
+        logger.info("Forcing IPv4 for Translation API connections")
+    except Exception as e:  # pragma: no cover - defensive; never block startup
+        logger.warning(f"Could not force IPv4 for Translation API: {e}")
+
 
 class RateLimiter:
     """Simple token-bucket rate limiter. Thread-safe: the chat reader and
@@ -177,8 +210,13 @@ class TranslationService:
         rate_limit_per_minute: int = 100,
         retry_attempts: int = 3,
         slang_path: Optional[str] = None,
-        cache_file: Optional[str] = None
+        cache_file: Optional[str] = None,
+        force_ipv4: bool = True
     ):
+        # Pin outbound connections to IPv4 before any request is made so an
+        # IPv4-restricted API key isn't rejected for calling over IPv6.
+        if force_ipv4:
+            force_ipv4_connections()
         self.api_key = api_key
         self.base_url = "https://translation.googleapis.com/language/translate/v2"
         self.headers = {'Content-Type': 'application/json'}
