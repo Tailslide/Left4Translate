@@ -3,6 +3,26 @@
 ## Unreleased
 
 ### Fixed
+- **Translation failed with 403 `API_KEY_IP_ADDRESS_BLOCKED` on IPv6**: an
+  API key restricted to an IPv4 address was rejected because, on a dual-stack
+  host, `requests`/urllib3 prefers IPv6 and the call went out over IPv6.
+  Outbound Translation API connections are now pinned to IPv4 by default so
+  they match the key's restriction. Toggle with the new `translation.forceIPv4`
+  config option (default `true`) or the "Force IPv4" checkbox in Settings →
+  Translation; set it `false` to allow IPv6 (`src/translator/translation_service.py`).
+- **Native crash (access violation) once the dashboard feed filled up**: the
+  crash from the earlier GC fix recurred in the field, and both crash logs
+  fault at the same place — trimming the oldest feed row (`removeRow`) after
+  500 translations, where Qt destroys that row's five C++ `QTableWidgetItem`
+  objects. The feed is now a `QTableView` over a plain-Python model
+  (`FeedModel`): rows are tuples in a deque, and inserting/trimming rows no
+  longer allocates or destroys any per-cell C++ objects, removing the crash
+  site entirely (`gui/dashboard_tab.py`).
+- **Overlay hardened the same way**: a later crash log caught the same native
+  fault while the overlay was constructing a new message QLabel. The overlay
+  now keeps a fixed pool of labels and reuses them (set text / toggle
+  visibility) instead of destroying and recreating widgets on every
+  translation (`gui/overlay_window.py`).
 - **Random native crash (access violation) during long GUI sessions**:
   Python's cyclic garbage collector could run on an engine worker thread and
   destroy Qt objects that belong to the GUI thread, corrupting Qt and killing
