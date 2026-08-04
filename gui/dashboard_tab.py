@@ -4,6 +4,15 @@ The feed mirrors what scrolls across the Turing Smart Screen: each chat or
 voice translation appears as a row (newest on top), team-colored. The stat
 cards summarise throughput and the translator cache occupancy, refreshed on a
 timer from the engine controller.
+
+The feed is a QTableView over a plain-Python model rather than a
+QTableWidget. The widget variant allocates five C++ ``QTableWidgetItem``
+objects per translation and has Qt destroy the oldest row's items natively
+inside ``removeRow`` once the feed is full — exactly where long sessions
+died with a native access violation (see logs/crash.log in the bug
+reports: both faults were inside ``add_translation``'s row-trim call).
+With a model, rows are tuples in a deque; inserting and trimming never
+touches the C++ heap beyond repainting.
 """
 
 from __future__ import annotations
@@ -11,9 +20,15 @@ from __future__ import annotations
 import time
 from collections import deque
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QEvent,
+    QModelIndex,
+    Qt,
+    QTimer,
+)
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -21,8 +36,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QTableWidget,
-    QTableWidgetItem,
+    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +46,73 @@ from gui.styles import TEXT_SECONDARY, VOICE_ACCENT, team_color
 from gui.widgets import StatCard
 
 _MAX_FEED_ROWS = 500
+
+# Shared invalid index for rowCount/columnCount defaults (never mutated).
+_ROOT_INDEX = QModelIndex()
+
+
+class FeedModel(QAbstractTableModel):
+    """Read-only model over the translation rows (newest first).
+
+    Each row is ``(cells, accent)``: five display strings and the QColor for
+    the Type/Player columns. Everything lives in Python; Qt only reads it.
+    """
+
+    HEADERS = ("Time", "Type", "Player", "Original", "Translated")
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._rows: deque[Tuple[List[str], QColor]] = deque()
+        self._time_color = QColor(TEXT_SECONDARY)
+
+    # ---- QAbstractTableModel interface ----------------------------------
+
+    def rowCount(self, parent: QModelIndex = _ROOT_INDEX) -> int:  # noqa: N802
+        return 0 if parent.isValid() else len(self._rows)
+
+    def columnCount(self, parent: QModelIndex = _ROOT_INDEX) -> int:  # noqa: N802
+        return 0 if parent.isValid() else len(self.HEADERS)
+
+    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):  # noqa: N802
+        if (
+            role == Qt.ItemDataRole.DisplayRole
+            and orientation == Qt.Orientation.Horizontal
+            and 0 <= section < len(self.HEADERS)
+        ):
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QModelIndex, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self._rows)):
+            return None
+        cells, accent = self._rows[index.row()]
+        col = index.column()
+        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.ToolTipRole):
+            return cells[col]
+        if role == Qt.ItemDataRole.ForegroundRole:
+            if col == 0:
+                return self._time_color
+            if col in (1, 2):
+                return accent
+        return None
+
+    # ---- Mutation (GUI thread only) --------------------------------------
+
+    def prepend(self, cells: List[str], accent: QColor) -> None:
+        """Insert a row at the top, trimming the oldest past the cap."""
+        self.beginInsertRows(QModelIndex(), 0, 0)
+        self._rows.appendleft((cells, accent))
+        self.endInsertRows()
+        if len(self._rows) > _MAX_FEED_ROWS:
+            last = len(self._rows) - 1
+            self.beginRemoveRows(QModelIndex(), last, last)
+            self._rows.pop()
+            self.endRemoveRows()
+
+    def clear(self) -> None:
+        self.beginResetModel()
+        self._rows.clear()
+        self.endResetModel()
 
 
 class DashboardTab(QWidget):
@@ -95,12 +176,13 @@ class DashboardTab(QWidget):
         if checked:
             self._feed.resizeRowsToContents()
         else:
-            for r in range(self._feed.rowCount()):
+            for r in range(self._model.rowCount()):
                 self._feed.setRowHeight(r, self._feed.verticalHeader().defaultSectionSize())
 
-    def _build_feed(self) -> QTableWidget:
-        table = QTableWidget(0, 5)
-        table.setHorizontalHeaderLabels(["Time", "Type", "Player", "Original", "Translated"])
+    def _build_feed(self) -> QTableView:
+        self._model = FeedModel(self)
+        table = QTableView()
+        table.setModel(self._model)
         table.verticalHeader().setVisible(False)
         table.setShowGrid(False)
         table.setAlternatingRowColors(True)
@@ -139,7 +221,7 @@ class DashboardTab(QWidget):
             self._empty_hint.move(0, self._feed.horizontalHeader().height())
 
     def _update_empty_hint(self) -> None:
-        self._empty_hint.setVisible(self._feed.rowCount() == 0)
+        self._empty_hint.setVisible(self._model.rowCount() == 0)
 
     # ---- Public slots ---------------------------------------------------
 
@@ -162,19 +244,7 @@ class DashboardTab(QWidget):
         else:
             color = QColor(team_color(team))
 
-        self._feed.insertRow(0)
-        cells = [now, type_label, player, original, translated]
-        for col, text in enumerate(cells):
-            item = QTableWidgetItem(text)
-            if col == 0:
-                item.setForeground(QColor(TEXT_SECONDARY))
-            elif col in (1, 2):
-                item.setForeground(color)
-            item.setToolTip(text)
-            self._feed.setItem(0, col, item)
-
-        if self._feed.rowCount() > _MAX_FEED_ROWS:
-            self._feed.removeRow(self._feed.rowCount() - 1)
+        self._model.prepend([now, type_label, player, original, translated], color)
         if self._wrap_check.isChecked():
             self._feed.resizeRowToContents(0)
         self._update_empty_hint()
@@ -197,7 +267,7 @@ class DashboardTab(QWidget):
         self._count = 0
         self._chars = 0
         self._recent.clear()
-        self._feed.setRowCount(0)
+        self._model.clear()
         self._update_empty_hint()
         self._card_total.set_value("0")
         self._card_chars.set_value("0")

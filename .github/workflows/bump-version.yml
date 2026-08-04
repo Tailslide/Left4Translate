@@ -28,7 +28,12 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
       - name: Bump patch version
-        run: bump-my-version bump patch
+        run: bump-my-version bump patch -v
 
       - name: Push changes
-        run: git push --follow-tags
+        # bump-my-version made the commit (commit = true); push it back to the
+        # branch that triggered this run. HEAD:<branch> works whether checkout
+        # left us on the branch or on a detached HEAD. The commit message
+        # carries [skip ci] and GITHUB_TOKEN pushes don't retrigger workflows,
+        # so this can't loop.
+        run: git push origin "HEAD:${{ github.ref_name }}"
