@@ -17,7 +17,8 @@
     "targetLanguage": "en",
     "cacheSize": 1000,
     "rateLimitPerMinute": 100,
-    "retryAttempts": 3
+    "retryAttempts": 3,
+    "forceIPv4": true
   },
   "screen": {
     "enabled": true,

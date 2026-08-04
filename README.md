@@ -1,10 +1,10 @@
-# Left4Translate v1.2.7
+# Left4Translate v1.2.8
 
 Real-time chat and voice translation for Left 4 Dead 2, displaying translated messages on a Turing Smart Screen.
 See here for compatible screen: https://www.aliexpress.com/item/1005003931363455.html
 See here for more info on screens: https://github.com/mathoudebine/turing-smart-screen-python
 
-[![Version](https://img.shields.io/badge/version-1.2.7-blue.svg)](https://github.com/yourusername/Left4Translate)
+[![Version](https://img.shields.io/badge/version-1.2.8-blue.svg)](https://github.com/yourusername/Left4Translate)
 
 Available as both a **console app** and a **full Windows desktop GUI** (with a
 live translation feed, system-tray support, and an in-app config editor — see
@@ -262,7 +262,8 @@ The `config.json` file contains all settings:
     "targetLanguage": "en",
     "cacheSize": 1000,
     "rateLimitPerMinute": 100,
-    "retryAttempts": 3
+    "retryAttempts": 3,
+    "forceIPv4": true
   },
   "screen": {
     "port": "COM8",
@@ -495,7 +496,11 @@ Note: Due to limitations in Left 4 Dead 2's console logging system, chat message
 - **Translation errors / HTTP 403.** Run **Diagnostics → Test translation**.
   A 403 usually means the API key is invalid, restricted to the wrong API, or
   over quota (the free tier is 500,000 characters/month; enable
-  `translation.persistCache` to stretch it).
+  `translation.persistCache` to stretch it). If the response says
+  `API_KEY_IP_ADDRESS_BLOCKED` and shows an IPv6 caller IP (e.g.
+  `2605:8d80:…`), your key's IP restriction is set to your IPv4 address but the
+  call went out over IPv6. Leave `translation.forceIPv4` set to `true` (the
+  default) so the app connects over IPv4 and matches the restriction.
 - **The overlay is invisible in game.** True *exclusive* fullscreen paints
   over everything; run L4D2 in borderless/windowed-fullscreen.
 - **A second copy won't open.** That's intentional — the running instance's

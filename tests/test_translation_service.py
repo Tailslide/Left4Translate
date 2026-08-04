@@ -114,3 +114,29 @@ def test_requests_carry_a_timeout(svc_module, service):
         post.return_value = _response("hi", detected="fr")
         service.translate_with_detection("bonjour le monde")
     assert post.call_args.kwargs["timeout"] == svc_module.REQUEST_TIMEOUT_SECONDS
+
+
+def test_force_ipv4_pins_urllib3_to_af_inet(svc_module):
+    # An IPv4-restricted API key is rejected when the call egresses over IPv6;
+    # forcing IPv4 makes urllib3's address-family selector return AF_INET.
+    import socket
+    import urllib3.util.connection as conn
+
+    original = conn.allowed_gai_family
+    try:
+        svc_module.force_ipv4_connections()
+        assert conn.allowed_gai_family() == socket.AF_INET
+    finally:
+        conn.allowed_gai_family = original
+
+
+def test_constructor_forces_ipv4_by_default(svc_module):
+    with mock.patch.object(svc_module, "force_ipv4_connections") as forced:
+        svc_module.TranslationService(api_key="k")
+    forced.assert_called_once()
+
+
+def test_constructor_can_opt_out_of_ipv4(svc_module):
+    with mock.patch.object(svc_module, "force_ipv4_connections") as forced:
+        svc_module.TranslationService(api_key="k", force_ipv4=False)
+    forced.assert_not_called()

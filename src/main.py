@@ -191,7 +191,8 @@ class Left4Translate:
                 rate_limit_per_minute=trans_config.rate_limit_per_minute,
                 retry_attempts=trans_config.retry_attempts,
                 slang_path=os.path.join(config_dir, "slang_es.json"),
-                cache_file=cache_file
+                cache_file=cache_file,
+                force_ipv4=trans_config.force_ipv4
             )
             
             # Whether the physical Turing Smart Screen is in use. When disabled,
