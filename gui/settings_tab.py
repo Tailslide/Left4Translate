@@ -322,11 +322,25 @@ class SettingsTab(QWidget):
         row.setSpacing(6)
         row.addWidget(combo, stretch=1)
         button = QPushButton("↻")
-        button.setFixedWidth(32)
+        # A square icon button: the "IconButton" style drops the wide default
+        # padding that otherwise clips the glyph, and the height matches the
+        # combo so the two line up.
+        button.setObjectName("IconButton")
+        button.setFixedSize(32, max(28, combo.sizeHint().height()))
         button.setToolTip("Re-scan available devices")
-        button.clicked.connect(lambda: self._fill_combo(combo, provider()))
+        button.clicked.connect(lambda: self._rescan(combo, provider))
         row.addWidget(button)
         return wrap
+
+    def _rescan(self, combo: QComboBox, provider) -> None:
+        """Re-enumerate devices into ``combo`` and report the count.
+
+        Refreshing gives no visible change when the device list is unchanged,
+        which reads as a dead button; the status message confirms it ran.
+        """
+        options = provider()
+        self._fill_combo(combo, options)
+        self.status_message.emit(f"Re-scanned devices — found {len(options)}.")
 
     def _make_widget(self, path: str, kind: str) -> QWidget:
         if kind == "bool":
