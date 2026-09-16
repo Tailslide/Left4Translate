@@ -4,4 +4,4 @@ bump-my-version rewrites this file (see pyproject.toml); everything else
 imports from here.
 """
 
-__version__ = "1.2.10"
+__version__ = "1.2.11"

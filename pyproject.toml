@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "left4translate"
-version = "1.2.10"
+version = "1.2.11"
 description = "Real-time chat and voice translation for Left 4 Dead 2, shown on a Turing Smart Screen or an on-screen overlay"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,7 +37,7 @@ ignore = [
 "tests/*" = ["E402"]
 
 [tool.bumpversion]
-current_version = "1.2.10"
+current_version = "1.2.11"
 # The Auto Bump Version workflow relies on bump-my-version making the commit
 # itself (then pushes it). With commit = false the bump only edited the files
 # and the workflow's push was a silent no-op, so the version never moved.
