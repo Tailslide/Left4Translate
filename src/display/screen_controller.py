@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Callable, List, Optional
 from datetime import datetime
 import time
 import re
@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 import threading
 
-from .turing_display import TuringDisplay
+from .turing_display import DisplayLinkError, TuringDisplay
 
 # Module-level logger
 logger = logging.getLogger(__name__)
@@ -43,7 +43,15 @@ class ScreenController:
     # Display constants - Left4Translate specific layout
     LINE_HEIGHT = 18  # Height for each line of text
     MESSAGE_SPACING = 4  # Space between messages
-    
+
+    # Link supervision
+    POLL_INTERVAL = 0.2       # How often the loop looks for work, in seconds
+    REFRESH_INTERVAL = 60.0   # Repaint an unchanged screen this often, in seconds
+    STALL_TIMEOUT = 15.0      # A single frame write may never take this long
+    WATCHDOG_INTERVAL = 1.0   # How often the watchdog checks on the display thread
+    RECONNECT_BACKOFF = (0, 2, 5, 15, 30)  # Seconds to wait before each retry
+    MAX_THREAD_RESTARTS = 3   # Give up restarting a display thread that keeps dying
+
     def __init__(
         self,
         port: str,
@@ -56,7 +64,11 @@ class ScreenController:
         font_path: str = None,
         font_size: int = 14,
         revision: str = "A",
-        app_version: str = ""
+        app_version: str = "",
+        on_status: Optional[Callable[[str, str], None]] = None,
+        poll_interval: Optional[float] = None,
+        stall_timeout: Optional[float] = None,
+        refresh_interval: Optional[float] = None
     ):
         self.port = port
         self.baud_rate = baud_rate
@@ -68,6 +80,11 @@ class ScreenController:
         self.font_size = font_size
         self.revision = revision
         self.app_version = app_version
+        self._on_status = on_status
+        self.poll_interval = self.POLL_INTERVAL if poll_interval is None else poll_interval
+        self.stall_timeout = self.STALL_TIMEOUT if stall_timeout is None else stall_timeout
+        self.refresh_interval = self.REFRESH_INTERVAL if refresh_interval is None else refresh_interval
+        self.watchdog_interval = self.WATCHDOG_INTERVAL
         
         # Reusable display library - handles all hardware communication
         self.display = TuringDisplay(
@@ -85,6 +102,15 @@ class ScreenController:
         self.active_messages: List[DisplayMessage] = []
         self.running = False
         self.display_thread = None
+
+        # Link supervision state
+        self._stop_event = threading.Event()
+        self.watchdog_thread = None
+        self._needs_reconnect = False
+        self._reconnect_attempts = 0
+        self._aborted_render_at = None
+        self._thread_restarts = 0
+        self._last_frame_at = 0.0
         
         # Cache for screen dimensions
         self._screen_height = 320  # Landscape mode height
@@ -130,22 +156,47 @@ class ScreenController:
             self.display.clear()
             self.display.render()
             
-            # Start display thread
+            # Start display and watchdog threads
             self.running = True
-            self.display_thread = threading.Thread(target=self._display_loop)
-            self.display_thread.daemon = True
-            self.display_thread.start()
+            self._stop_event.clear()
+            self._needs_reconnect = False
+            self._reconnect_attempts = 0
+            self._thread_restarts = 0
+            self._start_display_thread()
+
+            self.watchdog_thread = threading.Thread(target=self._watchdog_loop, daemon=True)
+            self.watchdog_thread.start()
             
             return True
         except Exception as e:
             logger.error(f"Failed to connect to screen: {e}")
             return False
-            
+
+    def _start_display_thread(self):
+        """Start (or restart) the thread that pushes frames to the screen."""
+        self.display_thread = threading.Thread(target=self._display_loop, daemon=True)
+        self.display_thread.start()
+
+    def _emit_status(self, state: str, detail: str = ""):
+        """Report a screen state change to an observer (best-effort)."""
+        if self._on_status is None:
+            return
+        try:
+            self._on_status(state, detail)
+        except Exception as e:  # an observer must never break the display loop
+            logger.debug(f"screen status observer error: {e}")
+
     def disconnect(self):
         """Disconnect from the screen."""
         self.running = False
-        if self.display_thread:
-            self.display_thread.join()
+        self._stop_event.set()
+        # A write that is stuck against a wedged screen would otherwise hold
+        # the display thread (and the shutdown) for as long as the panel likes.
+        if self.display.render_started_at is not None:
+            self.display.abort_write()
+        for thread in (self.display_thread, self.watchdog_thread):
+            if thread is not None and thread.is_alive():
+                thread.join(timeout=5)
         # Use the display library's disconnect
         self.display.disconnect()
         
@@ -283,16 +334,108 @@ class ScreenController:
         """Main display update loop."""
         while self.running:
             try:
-                self._update_display()
-                time.sleep(0.2)  # Reduced delay between updates
+                if self._needs_reconnect:
+                    self._reconnect()
+                else:
+                    self._update_display()
+            except DisplayLinkError as e:
+                # Part of a frame was dropped. The panel is now waiting for
+                # bytes that will never arrive and treats every later frame as
+                # the tail of that one, so it stays frozen until the link is
+                # rebuilt - this is the failure that used to look like the
+                # screen simply stopping with nothing in the log.
+                logger.warning(f"Screen stopped accepting data ({e}) - reconnecting")
+                self._needs_reconnect = True
+            except SystemExit as e:
+                # The Turing library exits the process when it cannot reopen
+                # the port; in a thread that kills the display loop silently.
+                logger.error(f"Screen library requested exit ({e}) - reconnecting")
+                self._needs_reconnect = True
             except Exception as e:
                 logger.error(f"Display error: {e}")
-                time.sleep(1)  # Wait before retry
-                
-    def _update_display(self):
-        """Update the screen display."""
+                self._stop_event.wait(1)  # Wait before retry
+            if not self._needs_reconnect:
+                self._stop_event.wait(self.poll_interval)
+
+    def _reconnect(self):
+        """Rebuild the link to the screen, backing off between attempts."""
+        delay = self.RECONNECT_BACKOFF[min(self._reconnect_attempts, len(self.RECONNECT_BACKOFF) - 1)]
+        if delay and self._stop_event.wait(delay):
+            return
+        if not self.running:  # shut down while we were waiting
+            return
+
+        self._reconnect_attempts += 1
+        logger.warning(f"Reconnecting to the Turing screen (attempt {self._reconnect_attempts})...")
+        self._emit_status("reconnecting", f"attempt {self._reconnect_attempts}")
+
+        if not self.display.reconnect():
+            logger.error("Screen reconnect failed - will retry")
+            self._emit_status("disconnected", "Screen not responding")
+            return
+
+        self._needs_reconnect = False
+        self._aborted_render_at = None
+        logger.info("Screen reconnected")
+        self._emit_status("connected", "Reconnected")
+        # The panel is blank after a reset, so the current messages have to be
+        # pushed again even though the buffer itself has not changed.
+        self._update_display(force=True)
+        # Only a frame that actually landed proves the link is back: if this
+        # one faults too, the backoff has to keep growing.
+        self._reconnect_attempts = 0
+
+    def _watchdog_loop(self):
+        """Catch a display thread that can no longer make progress.
+
+        The port is opened with hardware flow control, so a screen that stops
+        asserting CTS (USB selective suspend on an idle PC, or a wedged
+        controller) blocks ``write()`` indefinitely: the display thread sits
+        inside one frame forever while the rest of the app keeps running. That
+        is a frozen screen with nothing in the log, so it needs a watchdog
+        rather than an error handler.
+        """
+        while not self._stop_event.wait(self.watchdog_interval):
+            if not self.running:
+                break
+
+            started = self.display.render_started_at
+            if started is not None and started != self._aborted_render_at:
+                stuck_for = time.monotonic() - started
+                if stuck_for >= self.stall_timeout:
+                    logger.warning(
+                        f"Screen write stuck for {stuck_for:.0f}s - aborting it and reconnecting"
+                    )
+                    self._aborted_render_at = started
+                    self._needs_reconnect = True
+                    self.display.abort_write()
+
+            thread = self.display_thread
+            # ``ident`` is only set once a thread has actually started, so a
+            # thread caught mid-(re)start doesn't read as a dead one.
+            if thread is not None and thread.ident is not None and not thread.is_alive():
+                if self._thread_restarts >= self.MAX_THREAD_RESTARTS:
+                    logger.error("Display thread keeps dying - giving up on the screen")
+                    self._emit_status("disconnected", "Display thread stopped")
+                    break
+                self._thread_restarts += 1
+                logger.error(f"Display thread died - restarting it ({self._thread_restarts})")
+                self._needs_reconnect = True
+                self._start_display_thread()
+
+    def _update_display(self, force: bool = False):
+        """Update the screen display.
+
+        Only the frames that actually changed reach the hardware (see
+        :meth:`TuringDisplay.render`); an idle screen costs no serial traffic
+        beyond one repaint a minute, which covers a panel that loses its
+        picture without the serial link noticing.
+        """
         if not self.display.is_connected:
             return
+
+        if not force and time.monotonic() - self._last_frame_at >= self.refresh_interval:
+            force = True
             
         now = datetime.now()
         
@@ -342,4 +485,5 @@ class ScreenController:
             y += self.MESSAGE_SPACING
         
         # Update screen with complete buffer using display library
-        self.display.render()
+        if self.display.render(force=force):
+            self._last_frame_at = time.monotonic()

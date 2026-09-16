@@ -80,6 +80,9 @@ game restart, and on-screen message expiry.
 
 ### General Features
 - Display of translated messages on a Turing Smart Screen
+- Self-healing screen link: only changed frames are sent, and a screen that
+  stops responding (stalled USB write, PC left idle) is detected and
+  reconnected automatically instead of freezing silently
 - Message caching to reduce API calls
 - Rate limiting to prevent API overuse
 - Configurable display settings
@@ -489,6 +492,14 @@ Note: Due to limitations in Left 4 Dead 2's console logging system, chat message
   port** (the dropdown lists detected COM ports; hit ↻ after plugging in) and
   then **Diagnostics → Test screen**. If you have no Turing hardware, uncheck
   *Use hardware Turing screen* and use the **Overlay** button instead.
+- **The screen froze on an old message while chat kept translating.** The app
+  now notices this and reconnects on its own; the log says
+  `Screen stopped accepting data … - reconnecting` (or
+  `Screen write stuck for Ns`) followed by `Screen reconnected`, and the
+  **Screen** pill in the GUI turns amber while it retries. If it never comes
+  back, the panel is not answering at all — replug the USB cable, and if it
+  happens repeatedly try a different port or cable (a powered hub helps; USB
+  selective suspend on an idle PC is a common cause).
 - **Voice recognition fails or hears nothing.** Run **Diagnostics → Test
   microphone**. Very low levels (< −50 dB) usually mean the wrong input device
   is selected (pick it from the dropdown) or the mic is muted in Windows sound
