@@ -209,7 +209,8 @@ class Left4Translate:
                 message_timeout=screen_config.display.get("messageTimeout", 10000),
                 margin=screen_config.display.get("layout", {}).get("margin", 5),
                 spacing=screen_config.display.get("layout", {}).get("spacing", 2),
-                app_version=__version__
+                app_version=__version__,
+                on_status=self._handle_screen_status
             )
             
             # Initialize chat message reader if mode is 'chat' or 'both'
@@ -303,6 +304,15 @@ class Left4Translate:
 
         except Exception as e:
             self.logger.error(f"Error handling message: {e}")
+
+    def _handle_screen_status(self, state: str, detail: str = ""):
+        """Forward screen link state (reconnecting/connected) to observers.
+
+        The screen can drop out long after startup — a stalled USB link, a PC
+        that idled — so its state is not just something to report once when
+        the engine starts.
+        """
+        self._emit_status("screen", state, detail)
 
     def _handle_voice_status(self, state: str, detail: str = ""):
         """Forward voice pipeline state (recording/transcribing/armed) to observers."""

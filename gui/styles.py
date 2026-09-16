@@ -50,7 +50,7 @@ def status_dot_color(state: str) -> str:
     """Map an engine/component status string to a hex color.
 
     ``state`` is one of: idle / stopped / running / monitoring / armed /
-    connected / disconnected / error.
+    connected / reconnecting / disconnected / error.
     """
     return {
         "running": GREEN,
@@ -60,6 +60,7 @@ def status_dot_color(state: str) -> str:
         "starting": YELLOW,
         "recording": YELLOW,
         "transcribing": YELLOW,
+        "reconnecting": YELLOW,
         "disconnected": YELLOW,
         "error": RED,
     }.get(state, TEXT_DIM)

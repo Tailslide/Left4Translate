@@ -3,6 +3,34 @@
 ## Unreleased
 
 ### Fixed
+- **Turing screen froze and stopped showing new messages** (usually after the
+  PC had been left alone for a while), with chat still being translated and
+  logged and no error anywhere. Two things caused it, and neither raised an
+  exception:
+  * The display loop re-sent the whole 480x320 frame (~300 KB) five times a
+    second whether or not anything had changed, keeping the serial link
+    saturated. When a write eventually came back short, the Turing library
+    swallowed it — `WARNING turing: (Write line) Too fast! Slow down!` is the
+    only trace — and the lost bytes left the panel waiting for the tail of a
+    bitmap forever, so every later frame was consumed as pixel data and the
+    picture never changed again. Frames are now only sent when they actually
+    differ (an idle screen sends nothing at all), dropped bytes are detected
+    instead of ignored, and the link is rebuilt when they happen.
+  * The port is opened with hardware flow control, so a screen that stops
+    asserting CTS blocks the write forever and the display thread never comes
+    back. A watchdog now aborts a write that has been stuck for 15s and
+    reconnects.
+
+  Recovery is logged (`Screen stopped accepting data … - reconnecting`,
+  `Screen reconnected`) and reported to the GUI, which shows the **Screen**
+  pill amber while it retries (`src/display/turing_display.py`,
+  `src/display/screen_controller.py`).
+- **The whole app could die silently over a COM port**: the Turing library
+  calls `sys.exit(0)`/`os._exit(0)` when it cannot open the screen's port, and
+  it reopens the port from inside its own write error handling — so a USB
+  dropout could take the app down, or end the display thread with nothing in
+  the log. Opening the port is now handled by Left4Translate, which raises an
+  error the app can report and recover from (`src/display/turing_display.py`).
 - **Settings device combos looked broken**: the ↻ re-scan buttons beside the
   Serial port and Microphone device fields inherited the wide default button
   padding, which crushed the glyph into an unreadable vertical sliver, and the
